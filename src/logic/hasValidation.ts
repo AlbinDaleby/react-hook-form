@@ -8,5 +8,7 @@ export default <T extends RegisterOptions>(options?: T, mounted?: boolean) =>
     options.max ||
     options.maxLength ||
     options.minLength ||
+    options.maxDate ||
+    options.minDate ||
     options.pattern ||
     options.validate);

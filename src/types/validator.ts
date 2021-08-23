@@ -30,6 +30,8 @@ export type RegisterOptions<
   max: ValidationRule<number | string>;
   maxLength: ValidationRule<number | string>;
   minLength: ValidationRule<number | string>;
+  maxDate: ValidationRule<any>;
+  minDate: ValidationRule<any>;
   pattern: ValidationRule<RegExp>;
   validate:
     | Validate<FieldPathValue<TFieldValues, TFieldName>>
