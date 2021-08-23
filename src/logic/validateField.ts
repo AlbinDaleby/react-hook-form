@@ -2,6 +2,7 @@ import { INPUT_VALIDATION_RULES } from '../constants';
 import { Field, FieldError, InternalFieldErrors, Message } from '../types';
 import isBoolean from '../utils/isBoolean';
 import isCheckBoxInput from '../utils/isCheckBoxInput';
+import isDateObject from '../utils/isDateObject';
 import isEmptyObject from '../utils/isEmptyObject';
 import isFileInput from '../utils/isFileInput';
 import isFunction from '../utils/isFunction';
@@ -30,6 +31,8 @@ export default async (
     required,
     maxLength,
     minLength,
+    maxDate,
+    minDate,
     min,
     max,
     pattern,
@@ -166,6 +169,28 @@ export default async (
         return error;
       }
     }
+  }
+  
+  if ((maxDate || minDate) && !isEmpty && isDateObject(inputValue)) {
+    const { value: maxDateOutput, message: maxDateMessage } = getValueAndMessage(maxDate);
+    const { value: minDateOutput, message: minDateMessage } = getValueAndMessage(minDate);
+    const isAboveMaxDate = maxDateOutput && inputValue.getTime() >= (maxDateOutput as any).getTime()
+    const isBelowMinDate = minDateOutput && inputValue.getTime() <= (minDateOutput as any).getTime()
+    if (isAboveMaxDate) {
+        error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage,
+            ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage));
+        if (!validateAllFieldCriteria) {
+            setCustomValidty(maxDateMessage);
+        }
+    }
+    if (isBelowMinDate) {
+        error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.minDate, message: minDateMessage,
+            ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.minDate, minDateMessage));
+        if (!validateAllFieldCriteria) {
+            setCustomValidty(minDateMessage);
+        }
+    }
+    return error;
   }
 
   if (pattern && !isEmpty && isString(inputValue)) {

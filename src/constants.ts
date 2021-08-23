@@ -18,6 +18,8 @@ export const INPUT_VALIDATION_RULES = {
   min: 'min',
   maxLength: 'maxLength',
   minLength: 'minLength',
+  maxDate: 'maxDate',
+  minDate: 'minDate',
   pattern: 'pattern',
   required: 'required',
   validate: 'validate',
