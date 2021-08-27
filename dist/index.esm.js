@@ -134,10 +134,38 @@ function useFormState(props) {
     return getProxyFormState(formState, control._proxyFormState, _localProxyFormState.current, false);
 }
 
+var isKey = (value) => /^\w*$/.test(value);
+
+var stringToPath = (input) => compact(input.replace(/["|']|\]/g, '').split(/\.|\[/));
+
+function set(object, path, value) {
+    let index = -1;
+    const tempPath = isKey(path) ? [path] : stringToPath(path);
+    const length = tempPath.length;
+    const lastIndex = length - 1;
+    while (++index < length) {
+        const key = tempPath[index];
+        let newValue = value;
+        if (index !== lastIndex) {
+            const objValue = object[key];
+            newValue =
+                isObject(objValue) || Array.isArray(objValue)
+                    ? objValue
+                    : !isNaN(+tempPath[index + 1])
+                        ? []
+                        : {};
+        }
+        object[key] = newValue;
+        object = object[key];
+    }
+    return object;
+}
+
 function useController(props) {
     const methods = useFormContext();
     const { name, control = methods.control, shouldUnregister } = props;
     const [value, setInputStateValue] = React.useState(get(control._formValues, name, get(control._defaultValues, name, props.defaultValue)));
+    set(control._formValues, name, value);
     const formState = useFormState({
         control: control || methods.control,
         name,
@@ -191,12 +219,16 @@ function useController(props) {
             },
             name,
             value,
-            ref: (elm) => elm &&
-                registerProps.ref({
-                    focus: () => elm.focus && elm.focus(),
-                    setCustomValidity: (message) => elm.setCustomValidity(message),
-                    reportValidity: () => elm.reportValidity(),
-                }),
+            ref: (elm) => {
+                const field = get(control._fields, name);
+                if (elm && field) {
+                    field._f.ref = {
+                        focus: () => elm.focus(),
+                        setCustomValidity: (message) => elm.setCustomValidity(message),
+                        reportValidity: () => elm.reportValidity(),
+                    };
+                }
+            },
         },
         formState,
         fieldState: {
@@ -212,33 +244,6 @@ const Controller = (props) => props.render(useController(props));
 
 var appendErrors = (name, validateAllFieldCriteria, errors, type, message) => validateAllFieldCriteria
     ? Object.assign(Object.assign({}, errors[name]), { types: Object.assign(Object.assign({}, (errors[name] && errors[name].types ? errors[name].types : {})), { [type]: message || true }) }) : {};
-
-var isKey = (value) => /^\w*$/.test(value);
-
-var stringToPath = (input) => compact(input.replace(/["|']|\]/g, '').split(/\.|\[/));
-
-function set(object, path, value) {
-    let index = -1;
-    const tempPath = isKey(path) ? [path] : stringToPath(path);
-    const length = tempPath.length;
-    const lastIndex = length - 1;
-    while (++index < length) {
-        const key = tempPath[index];
-        let newValue = value;
-        if (index !== lastIndex) {
-            const objValue = object[key];
-            newValue =
-                isObject(objValue) || Array.isArray(objValue)
-                    ? objValue
-                    : !isNaN(+tempPath[index + 1])
-                        ? []
-                        : {};
-        }
-        object[key] = newValue;
-        object = object[key];
-    }
-    return object;
-}
 
 const focusFieldBy = (fields, callback, fieldsNames) => {
     for (const key of fieldsNames || Object.keys(fields)) {
@@ -1025,19 +1030,10 @@ function createFormControl(props = {}) {
             errors: _formState.errors,
         });
     };
-    const shouldRenderBaseOnValid = async () => {
-        const isValid = await validateForm(_fields, true);
-        if (isValid !== _formState.isValid) {
-            _formState.isValid = isValid;
-            _subjects.state.next({
-                isValid,
-            });
-        }
-    };
     const shouldRenderBaseOnError = async (shouldSkipRender, name, error, fieldState, isValidFromResolver, isWatched) => {
         const previousError = get(_formState.errors, name);
         const isValid = !!(_proxyFormState.isValid &&
-            (formOptions.resolver ? isValidFromResolver : shouldRenderBaseOnValid()));
+            (formOptions.resolver ? isValidFromResolver : _updateValid()));
         if (props.delayError && error) {
             _delayCallback =
                 _delayCallback || debounce(updateErrorState, props.delayError);
@@ -1052,7 +1048,7 @@ function createFormControl(props = {}) {
         if ((isWatched ||
             (error ? !deepEqual(previousError, error) : previousError) ||
             !isEmptyObject(fieldState) ||
-            _formState.isValid !== isValid) &&
+            (formOptions.resolver && _formState.isValid !== isValid)) &&
             !shouldSkipRender) {
             const updatedFormState = Object.assign(Object.assign(Object.assign({}, fieldState), (_proxyFormState.isValid && formOptions.resolver ? { isValid } : {})), { errors: _formState.errors, name });
             _formState = Object.assign(Object.assign({}, _formState), updatedFormState);
@@ -1313,12 +1309,7 @@ function createFormControl(props = {}) {
             isGlobal && _names.watch.add(fieldName);
             result.push(get(fieldValues, fieldName));
         }
-        return Array.isArray(fieldNames)
-            ? result
-            : isObject(result[0])
-                ? Object.assign({}, result[0]) : Array.isArray(result[0])
-                ? [...result[0]]
-                : result[0];
+        return Array.isArray(fieldNames) ? result : result[0];
     };
     const _updateValues = (defaultValues, name = '') => {
         for (const key in defaultValues) {
@@ -1326,7 +1317,8 @@ function createFormControl(props = {}) {
             const fieldName = name + (name ? '.' : '') + key;
             const field = get(_fields, fieldName);
             if (!field || !field._f) {
-                if (isObject(value) || Array.isArray(value)) {
+                if ((isObject(value) && Object.keys(value).length) ||
+                    (Array.isArray(value) && value.length)) {
                     _updateValues(value, fieldName);
                 }
                 else if (!field) {
@@ -1794,13 +1786,18 @@ function useWatch(props) {
     React.useEffect(() => {
         const watchSubscription = control._subjects.watch.subscribe({
             next: ({ name }) => {
-                (!_name.current ||
+                if (!_name.current ||
                     !name ||
                     convertToArrayPayload(_name.current).some((fieldName) => name &&
                         fieldName &&
                         (fieldName.startsWith(name) ||
-                            name.startsWith(fieldName)))) &&
-                    updateValue(control._getWatch(_name.current, defaultValue));
+                            name.startsWith(fieldName)))) {
+                    const result = control._getWatch(_name.current, defaultValue);
+                    updateValue(isObject(result)
+                        ? Object.assign({}, result) : Array.isArray(result)
+                        ? [...result]
+                        : result);
+                }
             },
         });
         disabled && watchSubscription.unsubscribe();

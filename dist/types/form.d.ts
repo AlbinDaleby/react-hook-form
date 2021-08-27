@@ -14,8 +14,7 @@ export declare type NestedValue<TValue extends unknown[] | Record<string, unknow
 export declare type UnpackNestedValue<T> = T extends NestedValue<infer U> ? U : T extends Date | FileList ? T : T extends Record<string, unknown> ? {
     [K in keyof T]: UnpackNestedValue<T[K]>;
 } : T;
-// export declare type DefaultValues<TFieldValues> = UnpackNestedValue<DeepPartial<TFieldValues>>;
-export declare type DefaultValues = UnpackNestedValue<DeepPartial<any>>;
+export declare type DefaultValues<TFieldValues> = UnpackNestedValue<DeepPartial<TFieldValues>>;
 export declare type InternalNameSet = Set<InternalFieldName>;
 export declare type ValidationMode = {
     onBlur: 'onBlur';
@@ -96,7 +95,7 @@ export declare type UseFormRegisterReturn = {
     name: InternalFieldName;
 };
 export declare type UseFormRegister<TFieldValues extends FieldValues> = <TFieldName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>>(name: TFieldName, options?: RegisterOptions<TFieldValues, TFieldName>) => UseFormRegisterReturn;
-export declare type RegisterMissFields<TFieldValues extends FieldValues> = <T extends Partial<DefaultValues<TFieldValues>>>(defaultValues: T, name?: string) => void;
+export declare type UpdateValues<TFieldValues extends FieldValues> = <T extends Partial<DefaultValues<TFieldValues>>>(defaultValues: T, name?: string) => void;
 export declare type UseFormSetFocus<TFieldValues extends FieldValues> = <TFieldName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>>(name: TFieldName) => void;
 export declare type UseFormGetValues<TFieldValues extends FieldValues> = {
     (): UnpackNestedValue<TFieldValues>;
@@ -165,7 +164,7 @@ export declare type Control<TFieldValues extends FieldValues = FieldValues, TCon
     _names: Names;
     _isMounted: boolean;
     _updateProps: (props: UseFormProps<TFieldValues, TContext>) => void;
-    _updateValues: RegisterMissFields<TFieldValues>;
+    _updateValues: UpdateValues<TFieldValues>;
     _isInAction: FormControl<boolean>;
     _getIsDirty: GetIsDirty;
     _formState: FormControl<FormState<TFieldValues>>;
@@ -212,7 +211,7 @@ export declare type UseWatchProps<TFieldValues extends FieldValues = FieldValues
     name?: FieldPath<TFieldValues> | FieldPath<TFieldValues>[] | readonly FieldPath<TFieldValues>[];
     control?: Control<TFieldValues>;
 };
-export declare type FormProviderProps<TFieldValues extends FieldValues = FieldValues> = {
+export declare type FormProviderProps<TFieldValues extends FieldValues = FieldValues, TContext extends object = object> = {
     children: React.ReactNode;
-} & UseFormReturn<TFieldValues>;
+} & UseFormReturn<TFieldValues, TContext>;
 export {};

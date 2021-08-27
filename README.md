@@ -1,4 +1,9 @@
 ## Forked so we could add custom functionality needed for Design System.
+The things that are different from this repo to the original one:
+* Added minDate and maxDate for validation,
+* Set mode to 'all' and shouldUnregister to 'true' by default
+
+---
 To update this repo and install it in DS:
 
 **In this repo**
