@@ -82,9 +82,10 @@ import unsetEmptyArray from './unsetEmptyArray';
 import validateField from './validateField';
 
 const defaultOptions = {
-  mode: VALIDATION_MODE.onSubmit,
+  mode: VALIDATION_MODE.all,
   reValidateMode: VALIDATION_MODE.onChange,
   shouldFocusError: true,
+  shouldUnregister: true,
 } as const;
 
 const isWindowUndefined = typeof window === 'undefined';
