@@ -70,6 +70,7 @@ export declare type FormState<TFieldValues> = {
     isSubmitted: boolean;
     isSubmitSuccessful: boolean;
     submitCount: number;
+    resetCount: number;
     touchedFields: FieldNamesMarkedBoolean<TFieldValues>;
     isSubmitting: boolean;
     isValidating: boolean;

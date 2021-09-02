@@ -107,6 +107,7 @@ export function createFormControl<
     dirtyFields: {},
     isSubmitted: false,
     submitCount: 0,
+    resetCount: 0,
     touchedFields: {},
     isSubmitting: false,
     isSubmitSuccessful: false,
@@ -1148,6 +1149,7 @@ export function createFormControl<
       submitCount: keepStateOptions.keepSubmitCount
         ? _formState.submitCount
         : 0,
+      resetCount: (_formState.resetCount += 1),
       isDirty: keepStateOptions.keepDirty
         ? _formState.isDirty
         : keepStateOptions.keepDefaultValues

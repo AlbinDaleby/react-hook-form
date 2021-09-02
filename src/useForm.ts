@@ -20,6 +20,7 @@ export function useForm<
     dirtyFields: {},
     isSubmitted: false,
     submitCount: 0,
+    resetCount: 0,
     touchedFields: {},
     isSubmitting: false,
     isSubmitSuccessful: false,
