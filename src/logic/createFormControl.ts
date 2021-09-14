@@ -1109,8 +1109,10 @@ export function createFormControl<
             : field._f.ref;
 
           try {
-            isHTMLElement(inputRef) && inputRef.closest('form')!.reset();
-            break;
+            if (isHTMLElement(inputRef)) {
+              inputRef.closest('form')!.reset();
+              break;
+            }
           } catch {}
         }
       }

@@ -1595,8 +1595,10 @@ function createFormControl(props = {}) {
                         ? field._f.refs[0]
                         : field._f.ref;
                     try {
-                        isHTMLElement(inputRef) && inputRef.closest('form').reset();
-                        break;
+                        if (isHTMLElement(inputRef)) {
+                            inputRef.closest('form').reset();
+                            break;
+                        }
                     }
                     catch (_a) { }
                 }
