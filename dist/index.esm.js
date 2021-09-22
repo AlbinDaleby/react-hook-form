@@ -895,26 +895,31 @@ var validateField = async (field, inputValue, validateAllFieldCriteria, shouldUs
             }
         }
     }
-    if ((maxDate || minDate) && !isEmpty && isDateObject(inputValue)) {
+    if ((maxDate || minDate) && !isEmpty) {
+        let parsedInputValue = inputValue;
+        if (!isDateObject(inputValue)) {
+            parsedInputValue = new Date(inputValue);
+        }
         const { value: maxDateOutput, message: maxDateMessage } = getValueAndMessage(maxDate);
         const { value: minDateOutput, message: minDateMessage } = getValueAndMessage(minDate);
-        const isAboveMaxDate = maxDateOutput && inputValue.getTime() >= maxDateOutput.getTime();
-        const isBelowMinDate = minDateOutput && inputValue.getTime() <= minDateOutput.getTime();
+        const isAboveMaxDate = maxDateOutput &&
+            parsedInputValue.getTime() >= maxDateOutput.getTime();
+        const isBelowMinDate = minDateOutput &&
+            parsedInputValue.getTime() <= minDateOutput.getTime();
         if (isAboveMaxDate) {
-            error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage,
-                ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage));
+            error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage, ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage));
             if (!validateAllFieldCriteria) {
                 setCustomValidty(maxDateMessage);
+                return error;
             }
         }
         if (isBelowMinDate) {
-            error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.minDate, message: minDateMessage,
-                ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.minDate, minDateMessage));
+            error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.minDate, message: minDateMessage, ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.minDate, minDateMessage));
             if (!validateAllFieldCriteria) {
                 setCustomValidty(minDateMessage);
+                return error;
             }
         }
-        return error;
     }
     if (pattern && !isEmpty && isString(inputValue)) {
         const { value: patternValue, message } = getValueAndMessage(pattern);

@@ -170,27 +170,42 @@ export default async (
       }
     }
   }
-  
-  if ((maxDate || minDate) && !isEmpty && isDateObject(inputValue)) {
-    const { value: maxDateOutput, message: maxDateMessage } = getValueAndMessage(maxDate);
-    const { value: minDateOutput, message: minDateMessage } = getValueAndMessage(minDate);
-    const isAboveMaxDate = maxDateOutput && inputValue.getTime() >= (maxDateOutput as any).getTime()
-    const isBelowMinDate = minDateOutput && inputValue.getTime() <= (minDateOutput as any).getTime()
+
+  if ((maxDate || minDate) && !isEmpty) {
+    let parsedInputValue = inputValue;
+    if (!isDateObject(inputValue)) {
+      parsedInputValue = new Date(inputValue);
+    }
+    const { value: maxDateOutput, message: maxDateMessage } =
+      getValueAndMessage(maxDate);
+    const { value: minDateOutput, message: minDateMessage } =
+      getValueAndMessage(minDate);
+    const isAboveMaxDate =
+      maxDateOutput &&
+      parsedInputValue.getTime() >= (maxDateOutput as any).getTime();
+    const isBelowMinDate =
+      minDateOutput &&
+      parsedInputValue.getTime() <= (minDateOutput as any).getTime();
     if (isAboveMaxDate) {
-        error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage,
-            ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage));
-        if (!validateAllFieldCriteria) {
-            setCustomValidty(maxDateMessage);
-        }
+      error[name] = Object.assign(
+        { type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage, ref },
+        appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage),
+      );
+      if (!validateAllFieldCriteria) {
+        setCustomValidty(maxDateMessage);
+        return error;
+      }
     }
     if (isBelowMinDate) {
-        error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.minDate, message: minDateMessage,
-            ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.minDate, minDateMessage));
-        if (!validateAllFieldCriteria) {
-            setCustomValidty(minDateMessage);
-        }
+      error[name] = Object.assign(
+        { type: INPUT_VALIDATION_RULES.minDate, message: minDateMessage, ref },
+        appendErrorsCurry(INPUT_VALIDATION_RULES.minDate, minDateMessage),
+      );
+      if (!validateAllFieldCriteria) {
+        setCustomValidty(minDateMessage);
+        return error;
+      }
     }
-    return error;
   }
 
   if (pattern && !isEmpty && isString(inputValue)) {
