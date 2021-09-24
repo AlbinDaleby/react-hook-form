@@ -902,6 +902,8 @@ var validateField = async (field, inputValue, validateAllFieldCriteria, shouldUs
         }
         const { value: maxDateOutput, message: maxDateMessage } = getValueAndMessage(maxDate);
         const { value: minDateOutput, message: minDateMessage } = getValueAndMessage(minDate);
+        minDateOutput && minDateOutput.setUTCHours(0, 0, 0, 0);
+        minDateOutput && maxDateOutput.setUTCHours(23, 59, 59, 999);
         const isAboveMaxDate = maxDateOutput &&
             parsedInputValue.getTime() >= maxDateOutput.getTime();
         const isBelowMinDate = minDateOutput &&

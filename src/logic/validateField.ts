@@ -180,6 +180,8 @@ export default async (
       getValueAndMessage(maxDate);
     const { value: minDateOutput, message: minDateMessage } =
       getValueAndMessage(minDate);
+    minDateOutput && (minDateOutput as any).setUTCHours(0, 0, 0, 0);
+    minDateOutput && (maxDateOutput as any).setUTCHours(23, 59, 59, 999);
     const isAboveMaxDate =
       maxDateOutput &&
       parsedInputValue.getTime() >= (maxDateOutput as any).getTime();
