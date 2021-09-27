@@ -1638,7 +1638,9 @@ function createFormControl(props = {}) {
             submitCount: keepStateOptions.keepSubmitCount
                 ? _formState.submitCount
                 : 0,
-            resetCount: (_formState.resetCount += 1),
+            resetCount: keepStateOptions.keepResetCount
+                ? _formState.resetCount
+                : (_formState.resetCount += 1),
             isDirty: keepStateOptions.keepDirty
                 ? _formState.isDirty
                 : keepStateOptions.keepDefaultValues
