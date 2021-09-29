@@ -144,6 +144,7 @@ export type KeepStateOptions = Partial<{
   keepIsValid: boolean;
   keepSubmitCount: boolean;
   keepResetCount: boolean;
+  keepFields: boolean;
 }>;
 
 export type SetFieldValue<TFieldValues> = FieldValue<TFieldValues>;

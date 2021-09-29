@@ -1615,7 +1615,12 @@ function createFormControl(props = {}) {
             _defaultValues = Object.assign({}, updatedValues);
         }
         if (!keepStateOptions.keepValues) {
-            _fields = {};
+            /**
+             * if keepFields is true it will prevent field values like required etc to be overwritten...
+             */
+            if (!keepStateOptions.keepFields) {
+                _fields = {};
+            }
             _subjects.control.next({
                 values: keepStateOptions.keepDefaultValues
                     ? _defaultValues

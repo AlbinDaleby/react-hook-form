@@ -87,6 +87,7 @@ export declare type KeepStateOptions = Partial<{
     keepIsValid: boolean;
     keepSubmitCount: boolean;
     keepResetCount: boolean;
+    keepFields: boolean;
 }>;
 export declare type SetFieldValue<TFieldValues> = FieldValue<TFieldValues>;
 export declare type RefCallBack = (instance: any) => void;
