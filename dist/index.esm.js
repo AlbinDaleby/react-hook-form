@@ -902,12 +902,19 @@ var validateField = async (field, inputValue, validateAllFieldCriteria, shouldUs
         }
         const { value: maxDateOutput, message: maxDateMessage } = getValueAndMessage(maxDate);
         const { value: minDateOutput, message: minDateMessage } = getValueAndMessage(minDate);
-        minDateOutput && minDateOutput.setUTCHours(0, 0, 0, 0);
-        minDateOutput && maxDateOutput.setUTCHours(23, 59, 59, 999);
+        /**
+         * Temporary fix, set minDateDefault to a hardcoded value of 1970-01-01
+         * if parsedInputValue is the same as 1970-01-01 that means a new Date was created
+         * with null as value, e.g new Date(null) = 1970-01-01
+         * in this case we want to assume that parsedInputValue is in fact not set and should not throw an error.
+         */
+        const minDateDefault = new Date('1970-01-01');
         const isAboveMaxDate = maxDateOutput &&
-            parsedInputValue.getTime() >= maxDateOutput.getTime();
+            parsedInputValue.getTime() !== minDateDefault.getTime() &&
+            parsedInputValue.getTime() > maxDateOutput.getTime();
         const isBelowMinDate = minDateOutput &&
-            parsedInputValue.getTime() <= minDateOutput.getTime();
+            parsedInputValue.getTime() !== minDateDefault.getTime() &&
+            parsedInputValue.getTime() < minDateOutput.getTime();
         if (isAboveMaxDate) {
             error[name] = Object.assign({ type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage, ref }, appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage));
             if (!validateAllFieldCriteria) {

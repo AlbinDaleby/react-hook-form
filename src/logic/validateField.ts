@@ -180,14 +180,21 @@ export default async (
       getValueAndMessage(maxDate);
     const { value: minDateOutput, message: minDateMessage } =
       getValueAndMessage(minDate);
-    minDateOutput && (minDateOutput as any).setUTCHours(0, 0, 0, 0);
-    minDateOutput && (maxDateOutput as any).setUTCHours(23, 59, 59, 999);
+    /**
+     * Temporary fix, set minDateDefault to a hardcoded value of 1970-01-01
+     * if parsedInputValue is the same as 1970-01-01 that means a new Date was created
+     * with null as value, e.g new Date(null) = 1970-01-01
+     * in this case we want to assume that parsedInputValue is in fact not set and should not throw an error.
+     */
+    const minDateDefault = new Date('1970-01-01');
     const isAboveMaxDate =
       maxDateOutput &&
-      parsedInputValue.getTime() >= (maxDateOutput as any).getTime();
+      parsedInputValue.getTime() !== minDateDefault.getTime() &&
+      parsedInputValue.getTime() > (maxDateOutput as any).getTime();
     const isBelowMinDate =
       minDateOutput &&
-      parsedInputValue.getTime() <= (minDateOutput as any).getTime();
+      parsedInputValue.getTime() !== minDateDefault.getTime() &&
+      parsedInputValue.getTime() < (minDateOutput as any).getTime();
     if (isAboveMaxDate) {
       error[name] = Object.assign(
         { type: INPUT_VALIDATION_RULES.maxDate, message: maxDateMessage, ref },
