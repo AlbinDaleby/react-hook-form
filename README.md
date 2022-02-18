@@ -16,7 +16,7 @@ To update this repo and install it in DS:
 - npm run build:modern
 - Commit and push.
 - git tag -a v7.14.0+snow.XXX -m "release 7.14.0+snow.XXX"
-- git push origin 7.14.0-snow.XXX
+- git push origin v7.14.0+snow.XXX
 
 **In uxui-snow-designsystem repo**
 
