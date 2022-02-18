@@ -174,7 +174,7 @@ export default async (
   if ((maxDate || minDate) && !isEmpty) {
     let parsedInputValue = inputValue;
     if (!isDateObject(inputValue)) {
-      parsedInputValue = new Date(inputValue);
+      parsedInputValue = new Date(`${inputValue}T00:00:00`);
     }
     const { value: maxDateOutput, message: maxDateMessage } =
       getValueAndMessage(maxDate);
@@ -186,7 +186,7 @@ export default async (
      * with null as value, e.g new Date(null) = 1970-01-01
      * in this case we want to assume that parsedInputValue is in fact not set and should not throw an error.
      */
-    const minDateDefault = new Date('1970-01-01');
+    const minDateDefault = new Date('1970-01-01T00:00:00');
     const isAboveMaxDate =
       maxDateOutput &&
       parsedInputValue.getTime() !== minDateDefault.getTime() &&
