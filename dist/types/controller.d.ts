@@ -1,6 +1,6 @@
-import * as React from 'react';
+import React from 'react';
 import { RegisterOptions } from './validator';
-import { Control, FieldError, FieldPath, FieldPathValue, FieldValues, RefCallBack, UnpackNestedValue, UseFormStateReturn } from './';
+import { Control, FieldError, FieldPath, FieldPathValue, FieldValues, Noop, RefCallBack, UnpackNestedValue, UseFormStateReturn } from './';
 export declare type ControllerFieldState = {
     invalid: boolean;
     isTouched: boolean;
@@ -9,7 +9,7 @@ export declare type ControllerFieldState = {
 };
 export declare type ControllerRenderProps<TFieldValues extends FieldValues = FieldValues, TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>> = {
     onChange: (...event: any[]) => void;
-    onBlur: () => void;
+    onBlur: Noop;
     value: UnpackNestedValue<FieldPathValue<TFieldValues, TName>>;
     name: TName;
     ref: RefCallBack;
@@ -26,6 +26,27 @@ export declare type UseControllerReturn<TFieldValues extends FieldValues = Field
     formState: UseFormStateReturn<TFieldValues>;
     fieldState: ControllerFieldState;
 };
+/**
+ * Render function to provide the control for the field.
+ *
+ * @returns all the event handler, and relevant field and form state.
+ *
+ * @example
+ * ```tsx
+ * const { field, fieldState, formState } = useController();
+ *
+ * <Controller
+ *   render={({ field, formState, fieldState }) => ({
+ *     <input
+ *       onChange={field.onChange}
+ *       onBlur={field.onBlur}
+ *       name={field.name}
+ *       ref={field.ref} // optional for focus management
+ *     />
+ *   })}
+ * />
+ * ```
+ */
 export declare type ControllerProps<TFieldValues extends FieldValues = FieldValues, TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>> = {
     render: ({ field, fieldState, formState, }: {
         field: ControllerRenderProps<TFieldValues, TName>;
@@ -33,3 +54,4 @@ export declare type ControllerProps<TFieldValues extends FieldValues = FieldValu
         formState: UseFormStateReturn<TFieldValues>;
     }) => React.ReactElement;
 } & UseControllerProps<TFieldValues, TName>;
+//# sourceMappingURL=controller.d.ts.map

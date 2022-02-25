@@ -1,1 +1,2 @@
-export declare const mockGenerateId: () => void;
+export {};
+//# sourceMappingURL=useFieldArray.test.d.ts.map

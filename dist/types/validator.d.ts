@@ -1,6 +1,6 @@
 import { Message } from './errors';
 import { FieldValues, InternalFieldName } from './fields';
-import { FieldPath, FieldPathValue } from './utils';
+import { FieldPath, FieldPathValue } from './path';
 export declare type ValidationValue = boolean | number | string | RegExp;
 export declare type ValidationRule<TValidationValue extends ValidationValue = ValidationValue> = TValidationValue | ValidationValueMessage<TValidationValue>;
 export declare type ValidationValueMessage<TValidationValue extends ValidationValue = ValidationValue> = {
@@ -13,8 +13,8 @@ export declare type RegisterOptions<TFieldValues extends FieldValues = FieldValu
     required: Message | ValidationRule<boolean>;
     min: ValidationRule<number | string>;
     max: ValidationRule<number | string>;
-    maxLength: ValidationRule<number | string>;
-    minLength: ValidationRule<number | string>;
+    maxLength: ValidationRule<number>;
+    minLength: ValidationRule<number>;
     maxDate: ValidationRule<any>;
     minDate: ValidationRule<any>;
     pattern: ValidationRule<RegExp>;
@@ -23,7 +23,10 @@ export declare type RegisterOptions<TFieldValues extends FieldValues = FieldValu
     valueAsDate: boolean;
     value: FieldPathValue<TFieldValues, TFieldName>;
     setValueAs: (value: any) => any;
-    shouldUnregister: boolean;
+    shouldUnregister?: boolean;
+    onChange?: (event: any) => void;
+    onBlur?: (event: any) => void;
     disabled: boolean;
     deps: InternalFieldName[];
 }>;
+//# sourceMappingURL=validator.d.ts.map

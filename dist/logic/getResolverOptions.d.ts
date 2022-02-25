@@ -1,5 +1,5 @@
 import { CriteriaMode, FieldName, FieldRefs, InternalFieldName } from '../types';
-declare const _default: <TFieldValues>(fieldsNames: Set<InternalFieldName> | InternalFieldName[], _fieldss: FieldRefs, criteriaMode?: CriteriaMode | undefined, shouldUseNativeValidation?: boolean | undefined) => {
+declare const _default: <TFieldValues>(fieldsNames: Set<InternalFieldName> | InternalFieldName[], _fields: FieldRefs, criteriaMode?: CriteriaMode | undefined, shouldUseNativeValidation?: boolean | undefined) => {
     criteriaMode: CriteriaMode | undefined;
     names: FieldName<TFieldValues>[];
     fields: Record<string, {
@@ -11,8 +11,8 @@ declare const _default: <TFieldValues>(fieldsNames: Set<InternalFieldName> | Int
         required: string | import("../types").ValidationRule<boolean>;
         min: import("../types").ValidationRule<string | number>;
         max: import("../types").ValidationRule<string | number>;
-        maxLength: import("../types").ValidationRule<string | number>;
-        minLength: import("../types").ValidationRule<string | number>;
+        maxLength: import("../types").ValidationRule<number>;
+        minLength: import("../types").ValidationRule<number>;
         maxDate: any;
         minDate: any;
         pattern: import("../types").ValidationRule<RegExp>;
@@ -21,10 +21,13 @@ declare const _default: <TFieldValues>(fieldsNames: Set<InternalFieldName> | Int
         valueAsDate: boolean;
         value: any;
         setValueAs: (value: any) => any;
-        shouldUnregister: boolean;
+        shouldUnregister?: boolean | undefined;
+        onChange?: ((event: any) => void) | undefined;
+        onBlur?: ((event: any) => void) | undefined;
         disabled: boolean;
         deps: string[];
     }>>;
     shouldUseNativeValidation: boolean | undefined;
 };
 export default _default;
+//# sourceMappingURL=getResolverOptions.d.ts.map
