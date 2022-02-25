@@ -178,7 +178,7 @@ export default async <T extends NativeFieldValue>(
   }
 
   if ((maxDate || minDate) && !isEmpty) {
-    let parsedInputValue = inputValue;
+    let parsedInputValue: any = inputValue;
     if (!isDateObject(inputValue)) {
       parsedInputValue = new Date(`${inputValue}T00:00:00`);
     }
@@ -207,7 +207,7 @@ export default async <T extends NativeFieldValue>(
         appendErrorsCurry(INPUT_VALIDATION_RULES.maxDate, maxDateMessage),
       );
       if (!validateAllFieldCriteria) {
-        setCustomValidty(maxDateMessage);
+        setCustomValidity(maxDateMessage);
         return error;
       }
     }
@@ -217,7 +217,7 @@ export default async <T extends NativeFieldValue>(
         appendErrorsCurry(INPUT_VALIDATION_RULES.minDate, minDateMessage),
       );
       if (!validateAllFieldCriteria) {
-        setCustomValidty(minDateMessage);
+        setCustomValidity(minDateMessage);
         return error;
       }
     }

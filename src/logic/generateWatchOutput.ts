@@ -15,7 +15,7 @@ export default (
   }
 
   if (isArray) {
-    return names.map(
+    return names?.map(
       (fieldName) => (
         isGlobal && _names.watch.add(fieldName as InternalFieldName),
         get(formValues, fieldName as InternalFieldName)
