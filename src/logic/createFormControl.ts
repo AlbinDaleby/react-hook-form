@@ -1101,35 +1101,11 @@ export function createFormControl<
     keepStateOptions = {},
   ) => {
     const updatedValues = formValues || _defaultValues;
-    // <<<<<<< HEAD
-    //     const values = cloneObject(updatedValues);
-
-    //     _formValues = values;
-
-    //     if (isWeb && !keepStateOptions.keepValues) {
-    //       for (const name of _names.mount) {
-    //         const field = get(_fields, name);
-    //         if (field && field._f) {
-    //           const inputRef = Array.isArray(field._f.refs)
-    //             ? field._f.refs[0]
-    //             : field._f.ref;
-
-    //           try {
-    //             if (isHTMLElement(inputRef)) {
-    //               inputRef.closest('form')!.reset();
-    //               break;
-    //             }
-    //           } catch {}
-    //         }
-    //       }
-    //     }
-    // =======
     const cloneUpdatedValues = cloneObject(updatedValues);
     const values =
       formValues && !isEmptyObject(formValues)
         ? cloneUpdatedValues
         : _defaultValues;
-    // >>>>>>> v7.26.0
 
     if (!keepStateOptions.keepDefaultValues) {
       _defaultValues = updatedValues;
