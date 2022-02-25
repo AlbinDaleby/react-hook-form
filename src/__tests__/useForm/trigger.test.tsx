@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -9,7 +9,11 @@ import {
 import { act, renderHook } from '@testing-library/react-hooks';
 
 import { VALIDATION_MODE } from '../../constants';
+import { Control, FieldPath } from '../../types';
+import { useController } from '../../useController';
 import { useForm } from '../../useForm';
+import { FormProvider } from '../../useFormContext';
+import { useFormState } from '../../useFormState';
 
 describe('trigger', () => {
   it('should remove all errors before set new errors when trigger entire form', async () => {
@@ -47,17 +51,17 @@ describe('trigger', () => {
     render(<Component />);
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
+      fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
     });
 
     await waitFor(() => screen.getByText('error'));
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
+      fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
     });
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
+      fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
     });
 
     expect(screen.queryByText('error')).toBeNull();
@@ -333,6 +337,178 @@ describe('trigger', () => {
         },
       });
     });
+
+    it('should update isValid with validation result at form level', async () => {
+      const App = () => {
+        const {
+          register,
+          formState: { isValid },
+          trigger,
+        } = useForm<{ test: string; test1: string }>({
+          defaultValues: {
+            test: '',
+          },
+          resolver: async (data) => {
+            if (data.test && data.test1) {
+              return {
+                errors: {},
+                values: {
+                  test: '1',
+                  test1: '2',
+                },
+              };
+            } else {
+              return {
+                errors: {
+                  test: {
+                    message: 'test',
+                    type: 'test',
+                  },
+                },
+                values: {},
+              };
+            }
+          },
+        });
+
+        return (
+          <div>
+            {isValid ? 'yes' : 'no'}
+            <input {...register('test')} />
+            <input {...register('test1')} />
+            <button
+              onClick={() => {
+                trigger('test');
+              }}
+            >
+              trigger1
+            </button>
+            <button
+              onClick={() => {
+                trigger('test1');
+              }}
+            >
+              trigger2
+            </button>
+          </div>
+        );
+      };
+
+      render(<App />);
+
+      fireEvent.change(screen.getAllByRole('textbox')[0], {
+        target: {
+          value: 'test',
+        },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'trigger1' }));
+
+      await waitFor(() => {
+        screen.getByText('no');
+      });
+
+      fireEvent.change(screen.getAllByRole('textbox')[1], {
+        target: {
+          value: 'test',
+        },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'trigger2' }));
+
+      await waitFor(() => {
+        screen.getByText('yes');
+      });
+    });
+
+    it('should update isValid for the entire useForm scope', async () => {
+      const InputA = () => {
+        const { isValid } = useFormState({ name: 'name' });
+
+        return <p>{isValid ? 'test: valid' : 'test: invalid'}</p>;
+      };
+
+      const InputB = () => {
+        const { isValid } = useFormState({ name: 'email' });
+
+        return <p>{isValid ? 'test1: valid' : 'test1: invalid'}</p>;
+      };
+
+      function App() {
+        const methods = useForm({
+          resolver: async (data) => {
+            if (data.test && data.test1) {
+              return {
+                errors: {},
+                values: {
+                  test: '1',
+                  test1: '2',
+                },
+              };
+            } else {
+              return {
+                errors: {
+                  test: {
+                    message: 'test',
+                    type: 'test',
+                  },
+                },
+                values: {},
+              };
+            }
+          },
+          mode: 'onChange',
+        });
+
+        return (
+          <FormProvider {...methods}>
+            <form>
+              <input
+                onChange={(e) =>
+                  methods.setValue('test', e.target.value, {
+                    shouldValidate: true,
+                  })
+                }
+              />
+              <InputA />
+              <input
+                onChange={(e) =>
+                  methods.setValue('test1', e.target.value, {
+                    shouldValidate: true,
+                  })
+                }
+              />
+              <InputB />
+            </form>
+          </FormProvider>
+        );
+      }
+
+      render(<App />);
+
+      await waitFor(() => {
+        screen.getByText('test: invalid');
+        screen.getByText('test1: invalid');
+      });
+
+      fireEvent.change(screen.getAllByRole('textbox')[0], {
+        target: { value: 'test' },
+      });
+
+      await waitFor(() => {
+        screen.getByText('test: invalid');
+        screen.getByText('test1: invalid');
+      });
+
+      fireEvent.change(screen.getAllByRole('textbox')[1], {
+        target: { value: 'test' },
+      });
+
+      await waitFor(() => {
+        screen.getByText('test: valid');
+        screen.getByText('test1: valid');
+      });
+    });
   });
 
   it('should return the status of the requested fields with array of fields for validation', async () => {
@@ -374,11 +550,38 @@ describe('trigger', () => {
   });
 
   it('should return true when field is found and validation pass', async () => {
-    const { result } = renderHook(() => useForm<{ test: string }>());
+    const App = () => {
+      const {
+        register,
+        trigger,
+        formState: { isValid },
+      } = useForm();
 
-    result.current.register('test');
+      React.useEffect(() => {
+        register('test');
+      }, [register]);
 
-    expect(await result.current.trigger('test')).toBeTruthy();
+      return (
+        <div>
+          <p>{isValid ? 'yes' : 'no'}</p>
+          <button
+            onClick={() => {
+              trigger('test');
+            }}
+          >
+            trigger
+          </button>
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    await waitFor(() => {
+      screen.getByText('yes');
+    });
   });
 
   it('should remove all errors before set new errors when trigger entire form', async () => {
@@ -411,17 +614,17 @@ describe('trigger', () => {
     render(<Component />);
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
+      fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
     });
 
     await waitFor(() => screen.getByText('error'));
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
+      fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
     });
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
+      fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
     });
 
     expect(screen.queryByText('error')).toBeNull();
@@ -659,5 +862,103 @@ describe('trigger', () => {
       screen.getByText('firstName');
       screen.getByText('lastName');
     });
+  });
+
+  it('should only trigger render on targeted input', async () => {
+    type FormValue = {
+      x: string;
+      y: string;
+    };
+
+    function Input({
+      name,
+      control,
+    }: {
+      name: FieldPath<FormValue>;
+      control: Control<FormValue>;
+    }) {
+      const renderCount = React.useRef(0);
+      renderCount.current += 1;
+
+      useController({
+        name,
+        control,
+      });
+
+      return <p>{renderCount.current}</p>;
+    }
+
+    function App() {
+      const { handleSubmit, control, trigger } = useForm<FormValue>();
+      const onSubmit = () => {};
+
+      return (
+        <div>
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <Input name="x" control={control} />
+            <Input name="y" control={control} />
+
+            <button type="button" onClick={() => trigger('x')}>
+              Trigger Validation on X
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    render(<App />);
+
+    actComponent(() => {
+      fireEvent.click(screen.getByRole('button'));
+    });
+
+    await waitFor(async () => {
+      screen.getByText('2');
+      screen.getByText('1');
+    });
+  });
+
+  it('should skip additional validation when input validation already failed', async () => {
+    let count = 0;
+
+    const App = () => {
+      const {
+        register,
+        trigger,
+        formState: { isValid },
+      } = useForm({
+        mode: 'onChange',
+      });
+      const validate = () => {
+        count++;
+        return false;
+      };
+
+      return (
+        <form>
+          <p>{isValid ? 'valid' : 'invalid'}</p>
+          <input
+            {...register('test', {
+              validate,
+            })}
+          />
+          <button onClick={() => trigger('test')} type={'button'}>
+            submit
+          </button>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    await waitFor(async () => {
+      screen.getByText('invalid');
+    });
+
+    await waitFor(async () => {
+      fireEvent.click(screen.getByRole('button'));
+    });
+
+    expect(count).toEqual(2);
   });
 });

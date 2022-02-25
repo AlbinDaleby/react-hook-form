@@ -1,10 +1,17 @@
-import * as React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import React from 'react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 
 import { Controller } from '../controller';
-import { Control } from '../types';
+import { Control, FieldPath } from '../types';
 import { useController } from '../useController';
 import { useForm } from '../useForm';
+import { FormProvider, useFormContext } from '../useFormContext';
 
 describe('useController', () => {
   it('should render input correctly', () => {
@@ -100,7 +107,7 @@ describe('useController', () => {
 
     screen.getByText('isTouched');
 
-    expect(renderCounter).toEqual([1, 3]);
+    expect(renderCounter).toEqual([3, 3]);
 
     await act(async () => {
       fireEvent.change(screen.getAllByRole('textbox')[0], {
@@ -114,7 +121,7 @@ describe('useController', () => {
       fireEvent.blur(screen.getAllByRole('textbox')[0]);
     });
 
-    expect(renderCounter).toEqual([3, 3]);
+    expect(renderCounter).toEqual([5, 5]);
   });
 
   describe('checkbox', () => {
@@ -387,7 +394,7 @@ describe('useController', () => {
     render(<App />);
 
     await act(async () => {
-      await fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByRole('button'));
     });
 
     expect((screen.getByRole('textbox') as HTMLInputElement).value).toEqual(
@@ -493,11 +500,193 @@ describe('useController', () => {
     render(<App />);
 
     await act(async () => {
-      await fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByRole('button'));
     });
 
     expect(onSubmit).toBeCalledWith({
       test: 'test',
     });
+  });
+
+  it('should return defaultValues when component is not yet mounted', async () => {
+    const defaultValues = {
+      test: {
+        deep: [
+          {
+            test: '0',
+            test1: '1',
+          },
+        ],
+      },
+    };
+
+    const App = () => {
+      const { control, getValues } = useForm<{
+        test: {
+          deep: { test: string; test1: string }[];
+        };
+      }>({
+        defaultValues,
+      });
+
+      const { field } = useController({
+        control,
+        name: 'test.deep.0.test',
+      });
+
+      return (
+        <div>
+          <input {...field} />
+          <p>{JSON.stringify(getValues())}</p>
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    expect(true).toEqual(true);
+
+    await waitFor(() => {
+      screen.getByText('{"test":{"deep":[{"test":"0","test1":"1"}]}}');
+    });
+  });
+
+  it('should trigger extra re-render and update latest value when setValue called during mount', async () => {
+    const Child = () => {
+      const { setValue } = useFormContext();
+      const {
+        field: { value },
+      } = useController({
+        name: 'content',
+      });
+
+      React.useEffect(() => {
+        setValue('content', 'expected value');
+      }, [setValue]);
+
+      return <p>{value}</p>;
+    };
+
+    function App() {
+      const methods = useForm({
+        defaultValues: {
+          content: 'default',
+        },
+      });
+
+      return (
+        <FormProvider {...methods}>
+          <form>
+            <Child />
+            <input type="submit" />
+          </form>
+        </FormProvider>
+      );
+    }
+
+    render(<App />);
+
+    await waitFor(async () => {
+      screen.getByText('expected value');
+    });
+  });
+
+  it('should remount with input with current formValue', () => {
+    let data: unknown;
+
+    function Input<T>({
+      control,
+      name,
+    }: {
+      control: Control<T>;
+      name: FieldPath<T>;
+    }) {
+      const {
+        field: { value },
+      } = useController({
+        control,
+        name,
+        shouldUnregister: true,
+      });
+
+      data = value;
+
+      return null;
+    }
+
+    const App = () => {
+      const { control } = useForm<{
+        test: string;
+      }>({
+        defaultValues: {
+          test: 'test',
+        },
+      });
+      const [toggle, setToggle] = React.useState(true);
+
+      return (
+        <div>
+          {toggle && <Input control={control} name={'test'} />}
+          <button onClick={() => setToggle(!toggle)}>toggle</button>
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    act(() => {
+      expect(data).toEqual('test');
+    });
+
+    fireEvent.click(screen.getByRole('button'));
+
+    fireEvent.click(screen.getByRole('button'));
+
+    act(() => {
+      expect(data).toBeUndefined();
+    });
+  });
+
+  it('should always get the latest value for onBlur event', async () => {
+    const watchResults: unknown[] = [];
+
+    const App = () => {
+      const { control, watch } = useForm();
+      const { field } = useController({
+        control,
+        name: 'test',
+        defaultValue: '',
+      });
+
+      watchResults.push(watch());
+
+      return (
+        <button
+          onClick={() => {
+            field.onChange('updated value');
+            field.onBlur();
+          }}
+        >
+          test
+        </button>
+      );
+    };
+
+    render(<App />);
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button'), {
+        target: {
+          value: 'test',
+        },
+      });
+    });
+
+    expect(watchResults).toEqual([
+      {},
+      {
+        test: 'updated value',
+      },
+    ]);
   });
 });

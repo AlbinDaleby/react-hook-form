@@ -38,10 +38,10 @@ describe('clone', () => {
     const copy = cloneObject(data);
     expect(cloneObject(data)).toEqual(copy);
 
-    // @ts-ignore
+    // @ts-expect-error
     copy.test.what = '1243';
     copy.test.date = new Date('2020-10-16');
-    // @ts-ignore
+    // @ts-expect-error
     copy.items[0] = 2;
 
     expect(data).toEqual({
@@ -76,9 +76,27 @@ describe('clone', () => {
       ]),
     });
 
-    // @ts-ignore
+    // @ts-expect-error
     data.items = [1, 2, 3];
 
     expect(copy.items).toEqual([2]);
+  });
+
+  it('should skip clone if a node contains function', () => {
+    function testFunction() {}
+
+    const test = {
+      data: {
+        testFunction,
+      },
+      other: 'string',
+    };
+
+    expect(cloneObject(test)).toEqual({
+      data: {
+        testFunction,
+      },
+      other: 'string',
+    });
   });
 });

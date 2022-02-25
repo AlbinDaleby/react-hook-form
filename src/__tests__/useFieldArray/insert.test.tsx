@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -8,9 +8,16 @@ import {
 import { act, renderHook } from '@testing-library/react-hooks';
 
 import { VALIDATION_MODE } from '../../constants';
+import * as generateId from '../../logic/generateId';
+import { Control, FieldPath } from '../../types';
+import { useController } from '../../useController';
 import { useFieldArray } from '../../useFieldArray';
 import { useForm } from '../../useForm';
-import { mockGenerateId } from '../useFieldArray.test';
+
+const mockGenerateId = () => {
+  let id = 0;
+  jest.spyOn(generateId, 'default').mockImplementation(() => (id++).toString());
+};
 
 jest.useFakeTimers();
 
@@ -100,7 +107,7 @@ describe('insert', () => {
 
       expect(result.current.formState.isDirty).toBeTruthy();
       expect(result.current.formState.dirtyFields).toEqual({
-        test: [undefined, { value: true, value1: true }, { value: true }],
+        test: [{ value: false }, { value1: true }, { value: true }],
       });
     },
   );
@@ -136,8 +143,8 @@ describe('insert', () => {
       expect(result.current.formState.isDirty).toBeTruthy();
       expect(result.current.formState.dirtyFields).toEqual({
         test: [
-          undefined,
-          { value1: true, value: true },
+          { value: false },
+          { value1: true },
           { value2: true },
           { value: true },
         ],
@@ -262,14 +269,21 @@ describe('insert', () => {
 
     render(<Component />);
 
-    fireEvent.click(screen.getByRole('button', { name: /append/i }));
-    fireEvent.click(screen.getByRole('button', { name: /append/i }));
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /append/i }));
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /append/i }));
+    });
 
     await actComponent(async () => {
       fireEvent.click(screen.getByRole('button', { name: /submit/i }));
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /insert/i }));
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /insert/i }));
+    });
 
     expect(errors.test[0]).toBeDefined();
     expect(errors.test[1]).toBeUndefined();
@@ -311,14 +325,21 @@ describe('insert', () => {
 
     render(<Component />);
 
-    fireEvent.click(screen.getByRole('button', { name: /append/i }));
-    fireEvent.click(screen.getByRole('button', { name: /append/i }));
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /append/i }));
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /append/i }));
+    });
 
     await actComponent(async () => {
       fireEvent.click(screen.getByRole('button', { name: /submit/i }));
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /insert array/i }));
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /insert array/i }));
+    });
 
     expect(errors.test[0]).toBeDefined();
     expect(errors.test[1]).toBeUndefined();
@@ -488,6 +509,89 @@ describe('insert', () => {
     ]);
   });
 
+  it('should append nested field value without its reference', () => {
+    type FormValues = {
+      test: { name: { deep: string } }[];
+    };
+
+    function Input({
+      name,
+      control,
+    }: {
+      name: FieldPath<FormValues>;
+      control: Control<FormValues>;
+    }) {
+      const { field } = useController({
+        name: name as 'test.0.name.deep',
+        control,
+      });
+
+      return <input type="text" {...field} />;
+    }
+
+    function FieldArray({
+      control,
+      name,
+      itemDefaultValue,
+    }: {
+      control: Control<FormValues>;
+      name: FieldPath<FormValues>;
+      itemDefaultValue: { name: { deep: string } };
+    }) {
+      const { fields, insert } = useFieldArray({
+        control,
+        name: name as 'test',
+      });
+
+      return (
+        <>
+          {fields.map((item, index) => (
+            <Input
+              key={item.id}
+              name={`test.${index}.name.deep`}
+              control={control}
+            />
+          ))}
+          <button type="button" onClick={() => insert(0, itemDefaultValue)}>
+            Append
+          </button>
+        </>
+      );
+    }
+
+    function App() {
+      const { control } = useForm<FormValues>({
+        defaultValues: {
+          test: [],
+        },
+      });
+
+      return (
+        <form>
+          <FieldArray
+            name="test"
+            control={control}
+            itemDefaultValue={{ name: { deep: '' } }}
+          />
+        </form>
+      );
+    }
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '1234' },
+    });
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(
+      (screen.getAllByRole('textbox')[0] as HTMLInputElement).value,
+    ).toEqual('');
+  });
+
   describe('with resolver', () => {
     it('should invoke resolver when formState.isValid true', async () => {
       const resolver = jest.fn().mockReturnValue({});
@@ -536,7 +640,7 @@ describe('insert', () => {
         result.current.insert(0, { value: '1' });
       });
 
-      expect(resolver).not.toBeCalled();
+      expect(resolver).toBeCalled();
     });
 
     it('should insert update fields during async submit', () => {
@@ -624,5 +728,111 @@ describe('insert', () => {
         (screen.getAllByRole('textbox')[0] as HTMLInputElement).value,
       ).toEqual('test1');
     });
+  });
+
+  it('should not omit keyName when provided', async () => {
+    type FormValues = {
+      test: {
+        test: string;
+        id: string;
+      }[];
+    };
+
+    const App = () => {
+      const [data, setData] = React.useState<unknown>([]);
+      const { control, register, handleSubmit } = useForm<FormValues>({
+        defaultValues: {
+          test: [{ id: '1234', test: 'data' }],
+        },
+      });
+
+      const { fields, insert } = useFieldArray({
+        control,
+        name: 'test',
+      });
+
+      return (
+        <form onSubmit={handleSubmit(setData)}>
+          {fields.map((field, index) => {
+            return <input key={field.id} {...register(`test.${index}.test`)} />;
+          })}
+          <button
+            type={'button'}
+            onClick={() => {
+              insert(1, {
+                id: 'whatever',
+                test: '1234',
+              });
+            }}
+          >
+            insert
+          </button>
+          <button>submit</button>
+          <p>{JSON.stringify(data)}</p>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'insert' }));
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    });
+
+    screen.getByText(
+      '{"test":[{"id":"1234","test":"data"},{"id":"whatever","test":"1234"}]}',
+    );
+  });
+
+  it('should not omit keyName when provided and defaultValue is empty', async () => {
+    type FormValues = {
+      test: {
+        test: string;
+        id: string;
+      }[];
+    };
+
+    const App = () => {
+      const [data, setData] = React.useState<unknown>([]);
+      const { control, register, handleSubmit } = useForm<FormValues>();
+
+      const { fields, insert } = useFieldArray({
+        control,
+        name: 'test',
+      });
+
+      return (
+        <form onSubmit={handleSubmit(setData)}>
+          {fields.map((field, index) => {
+            return <input key={field.id} {...register(`test.${index}.test`)} />;
+          })}
+          <button
+            type={'button'}
+            onClick={() => {
+              insert(0, {
+                id: 'whatever',
+                test: '1234',
+              });
+            }}
+          >
+            insert
+          </button>
+          <button>submit</button>
+          <p>{JSON.stringify(data)}</p>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'insert' }));
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    });
+
+    screen.getByText('{"test":[{"id":"whatever","test":"1234"}]}');
   });
 });

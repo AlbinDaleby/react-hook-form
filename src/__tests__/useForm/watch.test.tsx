@@ -1,9 +1,10 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
   render,
   screen,
+  waitFor,
 } from '@testing-library/react';
 import { act, renderHook } from '@testing-library/react-hooks';
 
@@ -40,7 +41,7 @@ describe('watch', () => {
     screen.getByText('test');
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByRole('button'));
     });
 
     expect(screen.queryByText('test')).toBeNull();
@@ -265,7 +266,7 @@ describe('watch', () => {
     ]);
   });
 
-  it('should watch correctly with useFieldArray with action and then fallback to onChange', () => {
+  it('should watch correctly with useFieldArray with action and then fallback to onChange', async () => {
     type FormValues = {
       names: {
         name: string;
@@ -313,21 +314,21 @@ describe('watch', () => {
 
     render(<Component />);
 
-    actComponent(() => {
+    await actComponent(async () => {
       fireEvent.click(screen.getByRole('button'));
     });
 
-    actComponent(() => {
+    await actComponent(async () => {
       fireEvent.click(screen.getByRole('button'));
     });
 
-    actComponent(() => {
+    await actComponent(async () => {
       fireEvent.change(screen.getAllByRole('textbox')[0], {
         target: { value: '123' },
       });
     });
 
-    actComponent(() => {
+    await actComponent(async () => {
       fireEvent.change(screen.getAllByRole('textbox')[1], {
         target: { value: '456' },
       });
@@ -454,5 +455,41 @@ describe('watch', () => {
     fireEvent.click(screen.getByRole('button'));
 
     expect(watched).toMatchSnapshot();
+  });
+
+  it('should flush additional render for shouldUnregister: true', async () => {
+    const watchedData: unknown[] = [];
+
+    const App = () => {
+      const { watch, reset, register } = useForm({
+        shouldUnregister: true,
+      });
+
+      React.useEffect(() => {
+        reset({
+          test: '1234',
+          data: '1234',
+        });
+      }, [reset]);
+
+      const result = watch();
+
+      watchedData.push(result);
+
+      return (
+        <div>
+          <input {...register('test')} />
+          {result.test && <p>{result.test}</p>}
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    await waitFor(async () => {
+      screen.getByText('1234');
+    });
+
+    expect(watchedData).toEqual([{}, {}, { test: '1234' }]);
   });
 });

@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -190,18 +190,18 @@ describe('useForm', () => {
       render(<Component />);
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'submit' }));
       });
 
       screen.getByText('First name is required.');
       screen.getByText('Last name is required.');
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
+        fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
       });
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'submit' }));
       });
 
       screen.getByText('Last name is required.');
@@ -423,7 +423,7 @@ describe('useForm', () => {
       fireEvent.click(screen.getByRole('button', { name: 'setRadio1' }));
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
       });
 
       expect(result).toEqual({ test: null });
@@ -431,7 +431,7 @@ describe('useForm', () => {
       fireEvent.click(screen.getByRole('button', { name: 'setRadio2' }));
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
       });
 
       expect(result).toEqual({});
@@ -490,52 +490,43 @@ describe('useForm', () => {
   });
 
   describe('handleChangeRef', () => {
-    let Component: React.FC<{
+    const Component = ({
+      name = 'test',
+      resolver,
+      mode,
+      rules = { required: 'required' },
+    }: {
       name?: string;
       resolver?: any;
       mode?: 'onBlur' | 'onSubmit' | 'onChange';
       rules?: RegisterOptions;
-    }>;
-    let methods: UseFormReturn<{ test: string }>;
-
-    beforeEach(() => {
-      Component = ({
-        name = 'test',
+    }) => {
+      const internationalMethods = useForm<{ test: string }>({
         resolver,
         mode,
-        rules = { required: 'required' },
-      }: {
-        name?: string;
-        resolver?: any;
-        mode?: 'onBlur' | 'onSubmit' | 'onChange';
-        rules?: RegisterOptions;
-      }) => {
-        const internationalMethods = useForm<{ test: string }>({
-          resolver,
-          mode,
-        });
-        const {
-          register,
-          handleSubmit,
-          formState: { errors, isValid },
-        } = internationalMethods;
-        methods = internationalMethods;
+      });
+      const {
+        register,
+        handleSubmit,
+        formState: { errors, isValid },
+      } = internationalMethods;
+      methods = internationalMethods;
 
-        return (
-          <div>
-            <input
-              type="text"
-              {...register(name as 'test', resolver ? {} : rules)}
-            />
-            <span role="alert">
-              {errors?.test?.message && errors.test.message}
-            </span>
-            <button onClick={handleSubmit(() => {})}>button</button>
-            <p>{isValid ? 'valid' : 'invalid'}</p>
-          </div>
-        );
-      };
-    });
+      return (
+        <div>
+          <input
+            type="text"
+            {...register(name as 'test', resolver ? {} : rules)}
+          />
+          <span role="alert">
+            {errors?.test?.message && errors.test.message}
+          </span>
+          <button onClick={handleSubmit(() => {})}>button</button>
+          <p>{isValid ? 'valid' : 'invalid'}</p>
+        </div>
+      );
+    };
+    let methods: UseFormReturn<{ test: string }>;
 
     describe('onSubmit mode', () => {
       it('should not contain error if value is valid', async () => {
@@ -546,13 +537,13 @@ describe('useForm', () => {
         });
 
         await actComponent(async () => {
-          await fireEvent.click(screen.getByRole('button'));
+          fireEvent.click(screen.getByRole('button'));
         });
 
         expect(screen.getByRole('alert').textContent).toBe('');
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'test', value: 'test' },
           });
         });
@@ -568,13 +559,13 @@ describe('useForm', () => {
         });
 
         await actComponent(async () => {
-          await fireEvent.click(screen.getByRole('button'));
+          fireEvent.click(screen.getByRole('button'));
         });
 
         expect(screen.getByRole('alert').textContent).toBe('');
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'wrongName', value: '' },
           });
         });
@@ -590,7 +581,7 @@ describe('useForm', () => {
         fireEvent.input(input, { target: { name: 'test', value: 'test' } });
 
         await actComponent(async () => {
-          await fireEvent.click(screen.getByRole('button'));
+          fireEvent.click(screen.getByRole('button'));
         });
 
         expect(screen.getByRole('alert').textContent).toBe('');
@@ -616,7 +607,7 @@ describe('useForm', () => {
         );
 
         await actComponent(async () => {
-          await fireEvent.input(input, { target: { name: 'test', value: '' } });
+          fireEvent.input(input, { target: { name: 'test', value: '' } });
         });
 
         expect(screen.getByRole('alert').textContent).toBe('required');
@@ -628,7 +619,7 @@ describe('useForm', () => {
         methods.formState.touchedFields;
 
         await actComponent(async () => {
-          await fireEvent.click(screen.getByRole('button'));
+          fireEvent.click(screen.getByRole('button'));
         });
 
         fireEvent.blur(screen.getByRole('textbox'), {
@@ -673,13 +664,11 @@ describe('useForm', () => {
         });
 
         await actComponent(async () => {
-          await fireEvent.click(
-            screen.getByRole('button', { name: /submit/i }),
-          );
+          fireEvent.click(screen.getByRole('button', { name: /submit/i }));
         });
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { value: '' },
           });
         });
@@ -687,7 +676,7 @@ describe('useForm', () => {
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
         await actComponent(async () => {
-          await fireEvent.blur(screen.getByRole('textbox'));
+          fireEvent.blur(screen.getByRole('textbox'));
         });
 
         expect(screen.queryByRole('alert')).toBeInTheDocument();
@@ -769,7 +758,7 @@ describe('useForm', () => {
         render(<Component mode="onBlur" />);
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: {
               value: '',
             },
@@ -900,7 +889,7 @@ describe('useForm', () => {
         methods.formState.isValid;
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'test', value: 'test' },
           });
         });
@@ -909,7 +898,7 @@ describe('useForm', () => {
         expect(methods.formState.isValid).toBeTruthy();
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'test', value: '' },
           });
         });
@@ -939,7 +928,7 @@ describe('useForm', () => {
         methods.formState.isValid;
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'test', value: 'test' },
           });
         });
@@ -979,7 +968,7 @@ describe('useForm', () => {
         methods.formState.isValid;
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'test', value: 'test' },
           });
         });
@@ -1003,7 +992,7 @@ describe('useForm', () => {
         expect(resolver).toHaveBeenCalled();
 
         await actComponent(async () => {
-          await fireEvent.input(screen.getByRole('textbox'), {
+          fireEvent.input(screen.getByRole('textbox'), {
             target: { name: 'test', value: 'test' },
           });
         });
@@ -1011,7 +1000,7 @@ describe('useForm', () => {
         expect(resolver.mock.calls).toMatchSnapshot();
 
         await actComponent(async () => {
-          await fireEvent.click(screen.getByText(/button/i));
+          fireEvent.click(screen.getByText(/button/i));
         });
         expect(resolver.mock.calls[1]).toMatchSnapshot();
       });
@@ -1035,7 +1024,6 @@ describe('useForm', () => {
           await result.current.register('test1');
         });
 
-        // `trigger` called with a field name
         await act(async () => {
           result.current.trigger('test.sub');
         });
@@ -1063,7 +1051,6 @@ describe('useForm', () => {
           names: ['test.sub', 'test1'],
         });
 
-        // `trigger` called to validate all fields
         await act(async () => {
           result.current.trigger();
         });
@@ -1074,7 +1061,6 @@ describe('useForm', () => {
           names: ['test.sub', 'test1'],
         });
 
-        // `trigger` called to validate fields
         await act(async () => {
           result.current.trigger(['test.sub', 'test1']);
         });
@@ -1211,13 +1197,66 @@ describe('useForm', () => {
       screen.getByRole('textbox').focus();
 
       await actComponent(async () => {
-        await fireEvent.blur(screen.getByRole('textbox'));
+        fireEvent.blur(screen.getByRole('textbox'));
       });
 
       expect(screen.queryByText('This is required.')).toBeInTheDocument();
 
       await actComponent(async () => {
-        await fireEvent.input(screen.getByRole('textbox'), {
+        fireEvent.input(screen.getByRole('textbox'), {
+          target: {
+            value: 'test',
+          },
+        });
+      });
+
+      expect(screen.queryByText('This is required.')).not.toBeInTheDocument();
+
+      await actComponent(async () => {
+        fireEvent.input(screen.getByRole('textbox'), {
+          target: {
+            value: '',
+          },
+        });
+      });
+
+      expect(screen.queryByText('This is required.')).toBeInTheDocument();
+    });
+
+    it('should validate onFocusout event', async () => {
+      const Component = () => {
+        const {
+          register,
+          formState: { errors },
+        } = useForm<{
+          test: string;
+        }>({
+          mode: 'onTouched',
+        });
+
+        return (
+          <>
+            <input
+              type="text"
+              {...register('test', { required: 'This is required.' })}
+            />
+            {errors.test?.message}
+          </>
+        );
+      };
+
+      render(<Component />);
+
+      screen.getByRole('textbox').focus();
+
+      await actComponent(async () => {
+        fireEvent.focusOut(screen.getByRole('textbox'));
+      });
+
+      expect(screen.queryByText('This is required.')).toBeInTheDocument();
+
+      await actComponent(async () => {
+        fireEvent.input(screen.getByRole('textbox'), {
           target: {
             value: 'test',
           },
@@ -1291,7 +1330,7 @@ describe('useForm', () => {
       fireEvent.click(screen.getByLabelText('checkbox.0'));
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByLabelText('checkbox.0'));
+        fireEvent.click(screen.getByLabelText('checkbox.0'));
       });
 
       expect(errorsObject).toEqual({
@@ -1299,13 +1338,13 @@ describe('useForm', () => {
       });
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByLabelText('checkbox.0'));
+        fireEvent.click(screen.getByLabelText('checkbox.0'));
       });
 
       expect(errorsObject).toEqual({});
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByLabelText('checkbox.0'));
+        fireEvent.click(screen.getByLabelText('checkbox.0'));
       });
 
       await actComponent(async () => {
@@ -1317,10 +1356,86 @@ describe('useForm', () => {
       });
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByLabelText('checkbox.0'));
+        fireEvent.click(screen.getByLabelText('checkbox.0'));
       });
 
       expect(errorsObject).toEqual({});
+    });
+
+    it('should not clear errors for non checkbox parent inputs', async () => {
+      let errorsObject = {};
+
+      const Component = () => {
+        const {
+          formState: { errors },
+          register,
+          handleSubmit,
+        } = useForm<{
+          checkbox: [{ test: string }, { test1: string }];
+        }>({
+          mode: 'onChange',
+          resolver: (data) => {
+            return {
+              errors: {
+                ...(!data.checkbox[0].test || !data.checkbox[1].test1
+                  ? {
+                      checkbox: [
+                        {
+                          ...(!data.checkbox[0].test
+                            ? { test: { type: 'error', message: 'wrong' } }
+                            : {}),
+                          ...(!data.checkbox[1].test1
+                            ? { test1: { type: 'error', message: 'wrong' } }
+                            : {}),
+                        },
+                      ],
+                    }
+                  : {}),
+              },
+              values: {},
+            };
+          },
+        });
+        errorsObject = errors;
+
+        return (
+          <form onSubmit={handleSubmit(() => {})}>
+            <input type={'checkbox'} {...register(`checkbox.0.test`)} />
+
+            <input {...register(`checkbox.1.test1`)} />
+            <button>Submit</button>
+          </form>
+        );
+      };
+
+      render(<Component />);
+
+      await actComponent(async () => {
+        fireEvent.click(screen.getByRole('button'));
+      });
+
+      expect(errorsObject).toEqual({
+        checkbox: [
+          {
+            test: { type: 'error', message: 'wrong' },
+            test1: { type: 'error', message: 'wrong' },
+          },
+        ],
+      });
+
+      fireEvent.click(screen.getByRole('checkbox'));
+
+      await actComponent(async () => {
+        fireEvent.click(screen.getByRole('button'));
+      });
+
+      expect(errorsObject).toEqual({
+        checkbox: [
+          {
+            test1: { type: 'error', message: 'wrong' },
+          },
+        ],
+      });
     });
 
     it('should have formState.isValid equals true with defined default values after executing resolver', async () => {
@@ -1366,14 +1481,11 @@ describe('useForm', () => {
           await screen.getByText('Toggle').click();
         });
 
-      // Show input and Submit button
       await toggle();
 
       expect(screen.getByText('Submit')).toBeEnabled();
 
-      // Hide input and Submit button
       await toggle();
-      // Show input and Submit button again
       await toggle();
 
       expect(screen.getByText('Submit')).toBeEnabled();
@@ -1408,5 +1520,38 @@ describe('useForm', () => {
 
       expect(Object.is(firstRenderControl, secondRenderControl)).toBe(true);
     });
+  });
+
+  describe('when input is not registered', () => {
+    it('trigger should not throw warn', async () => {
+      const { result } = renderHook(() =>
+        useForm<{
+          test: string;
+        }>(),
+      );
+
+      await act(async () =>
+        expect(await result.current.trigger('test')).toBeTruthy(),
+      );
+    });
+  });
+
+  it('should unsubscribe to all subject when hook unmounts', () => {
+    let tempControl: any;
+
+    const App = () => {
+      const { control } = useForm();
+      tempControl = control;
+
+      return null;
+    };
+
+    const { unmount } = render(<App />);
+
+    expect(tempControl._subjects.state.observers.length).toBeTruthy();
+
+    unmount();
+
+    expect(tempControl._subjects.state.observers.length).toBeFalsy();
   });
 });

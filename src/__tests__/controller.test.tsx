@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act,
   fireEvent,
@@ -8,9 +8,11 @@ import {
 } from '@testing-library/react';
 
 import { Controller } from '../controller';
-import { ControllerRenderProps } from '../types';
+import { ControllerRenderProps, NestedValue } from '../types';
 import { useFieldArray } from '../useFieldArray';
 import { useForm } from '../useForm';
+import { FormProvider } from '../useFormContext';
+import { useWatch } from '../useWatch';
 
 function Input<TFieldValues>({
   onChange,
@@ -152,7 +154,7 @@ describe('Controller', () => {
   });
 
   it("should trigger component's onChange method and invoke setValue method", () => {
-    let fieldValues: any;
+    let fieldValues: unknown;
     const Component = () => {
       const { control, getValues } = useForm();
 
@@ -1184,5 +1186,272 @@ describe('Controller', () => {
     });
 
     screen.getByText('error');
+  });
+
+  it('should not throw type error with field state', () => {
+    type FormValues = {
+      firstName: string;
+      deepNested: {
+        test: string;
+      };
+      todos: string[];
+      nestedValue: NestedValue<{ test: string }>;
+    };
+
+    function App() {
+      const { control } = useForm<FormValues>({
+        defaultValues: {
+          firstName: '',
+          deepNested: { test: '' },
+          todos: [],
+          nestedValue: { test: '' },
+        },
+      });
+
+      return (
+        <form>
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="firstName"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="deepNested.test"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="todos"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...{ ...field, value: field.value.test }} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="nestedValue"
+          />
+        </form>
+      );
+    }
+
+    render(<App />);
+
+    expect(screen.getAllByRole('textbox').length).toEqual(4);
+  });
+
+  it('should not cause type error with any', () => {
+    function App() {
+      const { control } = useForm<any>({
+        defaultValues: {
+          firstName: '',
+          deepNested: { test: '' },
+          todos: [],
+          nestedValue: { test: '' },
+        },
+      });
+
+      return (
+        <form>
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="firstName"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="deepNested.test"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="todos"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...{ ...field, value: field.value.test }} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="nestedValue"
+          />
+        </form>
+      );
+    }
+
+    render(<App />);
+
+    expect(screen.getAllByRole('textbox').length).toEqual(4);
+  });
+
+  it('should not cause type error without generic type', () => {
+    function App() {
+      const { control } = useForm({
+        defaultValues: {
+          firstName: '',
+          deepNested: { test: '' },
+          todos: [],
+          nestedValue: { test: '' },
+        },
+      });
+
+      return (
+        <form>
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="firstName"
+          />
+          <Controller
+            render={({ field, fieldState }) => (
+              <>
+                <input {...field} />
+                <p>{fieldState.error?.message}</p>
+              </>
+            )}
+            control={control}
+            name="deepNested.test"
+          />
+          <Controller
+            render={({ field }) => (
+              <>
+                <input {...field} />
+              </>
+            )}
+            control={control}
+            name="todos"
+          />
+          <Controller
+            render={({ field }) => (
+              <>
+                <input {...{ ...field, value: field.value.test }} />
+              </>
+            )}
+            control={control}
+            name="nestedValue"
+          />
+        </form>
+      );
+    }
+
+    render(<App />);
+
+    expect(screen.getAllByRole('textbox').length).toEqual(4);
+  });
+
+  it('should unregister component within field array when field is unmounted', () => {
+    const getValueFn = jest.fn();
+
+    const Child = () => {
+      const { fields } = useFieldArray({
+        name: 'names',
+      });
+      const show = useWatch({ name: 'show' });
+
+      return (
+        <>
+          <Controller
+            name={'show'}
+            render={({ field }) => (
+              <input
+                {...field}
+                checked={field.value}
+                type="checkbox"
+                data-testid="checkbox"
+              />
+            )}
+          />
+
+          {fields.map((field, i) => (
+            <div key={field.id}>
+              {show && (
+                <Controller
+                  shouldUnregister
+                  name={`names.${i}.firstName`}
+                  render={({ field }) => <input {...field} />}
+                />
+              )}
+            </div>
+          ))}
+        </>
+      );
+    };
+
+    function App() {
+      const methods = useForm({
+        defaultValues: { show: true, names: [{ firstName: '' }] },
+      });
+
+      return (
+        <FormProvider {...methods}>
+          <Child />
+          <button
+            onClick={() => {
+              getValueFn(methods.getValues());
+            }}
+          >
+            getValues
+          </button>
+        </FormProvider>
+      );
+    }
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(getValueFn).toBeCalledWith({
+      names: [{ firstName: '' }],
+      show: true,
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox'));
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(getValueFn).toBeCalledWith({
+      show: false,
+    });
   });
 });

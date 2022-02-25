@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -206,7 +206,7 @@ describe('formState', () => {
       screen.getByText('invalid');
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByTestId('select'), {
+        fireEvent.change(screen.getByTestId('select'), {
           target: {
             value: 'test',
           },
@@ -216,7 +216,7 @@ describe('formState', () => {
       await waitFor(() => screen.getByText('valid'));
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByTestId('select'), {
+        fireEvent.change(screen.getByTestId('select'), {
           target: {
             value: 'test1',
           },
@@ -226,7 +226,7 @@ describe('formState', () => {
       await waitFor(() => screen.getByText('invalid'));
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByTestId('select'), {
+        fireEvent.change(screen.getByTestId('select'), {
           target: {
             value: 'test',
           },
@@ -236,7 +236,7 @@ describe('formState', () => {
       await waitFor(() => screen.getByText('valid'));
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByTestId('select'), {
+        fireEvent.change(screen.getByTestId('select'), {
           target: {
             value: 'test1',
           },
@@ -384,6 +384,66 @@ describe('formState', () => {
 
     screen.getByText('isSubmitted');
     screen.getByText('isNotSubmitSuccessful');
+  });
+
+  it('should update isValidating to true when other validation still running', async () => {
+    function App() {
+      const [stateValidation, setStateValidation] = React.useState(false);
+      const {
+        register,
+        formState: { isValidating },
+      } = useForm({ mode: 'all' });
+
+      return (
+        <div>
+          <p>isValidating: {String(isValidating)}</p>
+          <p>stateValidation: {String(stateValidation)}</p>
+          <form>
+            <input
+              {...register('lastName', {
+                required: true,
+                validate: () => {
+                  setStateValidation(true);
+                  return new Promise((resolve) => {
+                    setTimeout(() => {
+                      setStateValidation(false);
+                      resolve(true);
+                    }, 5000);
+                  });
+                },
+              })}
+              placeholder="async"
+            />
+
+            <input
+              {...register('firstName', { required: true })}
+              placeholder="required"
+            />
+          </form>
+        </div>
+      );
+    }
+
+    render(<App />);
+
+    fireEvent.change(screen.getByPlaceholderText('async'), {
+      target: { value: 'test' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('required'), {
+      target: { value: 'test' },
+    });
+
+    screen.getByText('isValidating: true');
+    screen.getByText('stateValidation: true');
+
+    await actComponent(async () => {
+      jest.runAllTimers();
+    });
+
+    await actComponent(async () => {
+      screen.getByText('isValidating: false');
+      screen.getByText('stateValidation: false');
+    });
   });
 
   it('should update correct isValid formState with dynamic fields', async () => {
@@ -656,7 +716,7 @@ describe('formState', () => {
       render(<App />);
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByRole('textbox'), {
+        fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '123456',
           },
@@ -703,7 +763,7 @@ describe('formState', () => {
       render(<App />);
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByRole('textbox'), {
+        fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '123',
           },
@@ -717,7 +777,7 @@ describe('formState', () => {
       });
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByRole('textbox'), {
+        fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '',
           },
@@ -770,7 +830,7 @@ describe('formState', () => {
       render(<App />);
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByRole('textbox'), {
+        fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '123456',
           },
@@ -815,7 +875,7 @@ describe('formState', () => {
       render(<App />);
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByRole('textbox'), {
+        fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '123456',
           },
@@ -825,7 +885,7 @@ describe('formState', () => {
       });
 
       await actComponent(async () => {
-        await fireEvent.change(screen.getByRole('textbox'), {
+        fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '123',
           },

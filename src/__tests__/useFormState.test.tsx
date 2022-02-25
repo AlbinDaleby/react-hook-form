@@ -1,7 +1,15 @@
-import * as React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import React from 'react';
+import {
+  act,
+  act as actComponent,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 
+import { Controller } from '../controller';
 import { Control } from '../types';
+import { useFieldArray } from '../useFieldArray';
 import { useForm } from '../useForm';
 import { useFormState } from '../useFormState';
 
@@ -92,7 +100,7 @@ describe('useFormState', () => {
     render(<Component />);
 
     await act(async () => {
-      await fireEvent.input(screen.getByLabelText('test'), {
+      fireEvent.input(screen.getByLabelText('test'), {
         target: {
           value: 'test',
         },
@@ -103,7 +111,7 @@ describe('useFormState', () => {
     screen.getByText('no');
 
     await act(async () => {
-      await fireEvent.input(screen.getByLabelText('test'), {
+      fireEvent.input(screen.getByLabelText('test'), {
         target: {
           value: 'testtest',
         },
@@ -171,7 +179,7 @@ describe('useFormState', () => {
     render(<Component />);
 
     await act(async () => {
-      await fireEvent.input(screen.getByLabelText('test'), {
+      fireEvent.input(screen.getByLabelText('test'), {
         target: {
           value: 'test',
         },
@@ -193,7 +201,7 @@ describe('useFormState', () => {
     expect(test1Count).toEqual(2);
 
     await act(async () => {
-      await fireEvent.input(screen.getByLabelText('test'), {
+      fireEvent.input(screen.getByLabelText('test'), {
         target: {
           value: '',
         },
@@ -236,7 +244,7 @@ describe('useFormState', () => {
     render(<Component />);
 
     await act(async () => {
-      await fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByRole('button'));
     });
 
     screen.getByText('isSubmitted');
@@ -534,5 +542,104 @@ describe('useFormState', () => {
     });
 
     screen.getByText('error');
+  });
+
+  it('should not start early subscription and throw warning at strict mode', async () => {
+    type FormValues = { test: { data: string }[] };
+
+    function FieldArray() {
+      const { reset, control } = useForm<FormValues>({
+        defaultValues: { test: [] },
+      });
+      const { fields, append } = useFieldArray({ control, name: 'test' });
+      return (
+        <div>
+          {fields.map((field, index) => (
+            <div key={field.id}>
+              <Controller
+                control={control}
+                name={`test.${index}.data` as const}
+                render={({ field }) => <input {...field} />}
+              />
+            </div>
+          ))}
+          <button
+            onClick={() =>
+              append({
+                data: 'data',
+              })
+            }
+          >
+            add
+          </button>
+          <button onClick={() => reset({})}>reset</button>
+        </div>
+      );
+    }
+
+    const App = () => {
+      return (
+        <React.StrictMode>
+          <FieldArray />
+        </React.StrictMode>
+      );
+    };
+
+    render(<App />);
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'add' }));
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'reset' }));
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'add' }));
+    });
+  });
+
+  it('should subscribe to exact form state update', () => {
+    const App = () => {
+      const { control, register } = useForm();
+      const [exact, setExact] = React.useState(true);
+      const { touchedFields } = useFormState({
+        name: 'test',
+        control,
+        exact,
+      });
+
+      return (
+        <div>
+          <input {...register('testData')} />
+          <p>{touchedFields.testData && 'touched'}</p>
+
+          <button
+            onClick={() => {
+              setExact(false);
+            }}
+          >
+            toggle
+          </button>
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.focus(screen.getByRole('textbox'));
+
+    fireEvent.blur(screen.getByRole('textbox'));
+
+    expect(screen.queryByText('touched')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button'));
+
+    fireEvent.focus(screen.getByRole('textbox'));
+
+    fireEvent.blur(screen.getByRole('textbox'));
+
+    screen.queryByText('touched');
   });
 });

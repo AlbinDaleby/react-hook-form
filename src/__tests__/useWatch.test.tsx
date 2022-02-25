@@ -1,6 +1,6 @@
-import * as React from 'react';
+import React from 'react';
 import {
-  act as actComponent,
+  act,
   fireEvent,
   render,
   screen,
@@ -193,17 +193,142 @@ describe('useWatch', () => {
 
     render(<Component />);
 
-    await actComponent(async () => {
+    await act(async () => {
       fireEvent.change(screen.getByRole('textbox'), {
         target: { value: 'test' },
       });
     });
 
-    await actComponent(async () => {
+    await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     });
 
     expect(submitData).toEqual({});
+  });
+
+  it('should return defaultValue with shouldUnregister set to true and keepDefaultValues', () => {
+    const output: unknown[] = [];
+
+    function App() {
+      const { register, reset, control } = useForm({
+        defaultValues: { test: 'test' },
+        shouldUnregister: true,
+      });
+      const inputs = useWatch({ control });
+
+      output.push(inputs);
+
+      return (
+        <form>
+          <input {...register('test')} />
+          <button
+            type="button"
+            onClick={() => reset(undefined, { keepDefaultValues: true })}
+          >
+            Reset
+          </button>
+        </form>
+      );
+    }
+
+    render(<App />);
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button'));
+    });
+
+    act(() => {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: { value: 'test' },
+      });
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button'));
+    });
+
+    expect(output).toEqual([
+      { test: 'test' },
+      { test: 'test' },
+      { test: 'test' },
+      { test: 'test' },
+      { test: 'test' },
+    ]);
+  });
+
+  it('should subscribe to exact input change', () => {
+    const App = () => {
+      const { control, register } = useForm();
+      const value = useWatch({
+        name: 'test',
+        control,
+        exact: true,
+        defaultValue: 'test',
+      });
+
+      return (
+        <div>
+          <input {...register('test.0.data')} />
+          <p>{value}</p>
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: {
+        value: '1234',
+      },
+    });
+
+    screen.getByText('test');
+  });
+
+  it('should return root object subscription', () => {
+    function App() {
+      const { register, control } = useForm({
+        defaultValues: { field: { firstName: 'value' } },
+      });
+      const field = useWatch({ control, name: 'field' });
+
+      return (
+        <div>
+          <form>
+            <input {...register('field.firstName')} placeholder="First Name" />
+            <p>{field.firstName}</p>
+          </form>
+        </div>
+      );
+    }
+
+    render(<App />);
+
+    act(() => {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: {
+          value: '123',
+        },
+      });
+    });
+
+    act(() => {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: {
+          value: '234',
+        },
+      });
+    });
+
+    act(() => {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: {
+          value: '345',
+        },
+      });
+    });
+
+    screen.getByText('345');
   });
 
   describe('when disabled prop is used', () => {
@@ -256,7 +381,7 @@ describe('useWatch', () => {
 
       render(<App />);
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: 'what',
@@ -268,7 +393,7 @@ describe('useWatch', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: 'what12345',
@@ -280,7 +405,7 @@ describe('useWatch', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: '12345',
@@ -340,7 +465,7 @@ describe('useWatch', () => {
 
       render(<WatchApp />);
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: 'what',
@@ -352,7 +477,7 @@ describe('useWatch', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.change(screen.getByRole('textbox'), {
           target: {
             value: 'what12345',
@@ -404,12 +529,12 @@ describe('useWatch', () => {
         target: { value: 'test' },
       });
 
-      await actComponent(async () => {
-        await fireEvent.submit(screen.getByRole('button', { name: /submit/i }));
+      await act(async () => {
+        fireEvent.submit(screen.getByRole('button', { name: /submit/i }));
       });
 
-      await actComponent(async () => {
-        await fireEvent.input(childInput, { target: { value: 'test1' } });
+      await act(async () => {
+        fireEvent.input(childInput, { target: { value: 'test1' } });
       });
     });
 
@@ -559,8 +684,8 @@ describe('useWatch', () => {
 
       screen.getByText('test');
 
-      await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button'));
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button'));
       });
 
       expect(screen.queryByText('test')).toBeNull();
@@ -947,13 +1072,34 @@ describe('useWatch', () => {
 
       screen.getByText('firstName');
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.change(screen.getByRole('textbox'), {
           target: { value: '123' },
         });
       });
 
       screen.getByText('123');
+    });
+
+    it('should fallback to inline defaultValue with reset API', () => {
+      const App = () => {
+        const { control, reset } = useForm();
+        const value = useWatch({
+          name: 'test',
+          defaultValue: 'yes',
+          control,
+        });
+
+        React.useEffect(() => {
+          reset({});
+        }, [reset]);
+
+        return <p>{value ? 'yes' : 'no'}</p>;
+      };
+
+      render(<App />);
+
+      screen.getByText('yes');
     });
 
     describe('with useFieldArray', () => {
@@ -1205,7 +1351,7 @@ describe('useWatch', () => {
 
       screen.getByText('test');
 
-      await actComponent(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByRole('button'));
       });
 

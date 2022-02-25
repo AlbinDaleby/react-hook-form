@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -8,6 +8,7 @@ import {
 import { act, renderHook } from '@testing-library/react-hooks';
 
 import { VALIDATION_MODE } from '../../constants';
+import { useFieldArray } from '../../useFieldArray';
 import { useForm } from '../../useForm';
 import isFunction from '../../utils/isFunction';
 
@@ -86,6 +87,38 @@ describe('handleSubmit', () => {
     });
   });
 
+  it('should not provide reference to _formValues as data', async () => {
+    const { result } = renderHook(() =>
+      useForm<{ test: string; deep: { values: string } }>({
+        mode: VALIDATION_MODE.onSubmit,
+        defaultValues: {
+          test: 'data',
+          deep: {
+            values: '5',
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleSubmit((data: any) => {
+        data.deep.values = '12';
+      })({
+        preventDefault: () => {},
+        persist: () => {},
+      } as React.SyntheticEvent);
+    });
+
+    await act(async () => {
+      await result.current.handleSubmit((data: any) => {
+        expect(data.deep).toEqual({ values: '5' });
+      })({
+        preventDefault: () => {},
+        persist: () => {},
+      } as React.SyntheticEvent);
+    });
+  });
+
   it('should not invoke callback when there are errors', async () => {
     const { result } = renderHook(() => useForm<{ test: string }>());
 
@@ -124,7 +157,7 @@ describe('handleSubmit', () => {
 
     expect(callback).not.toBeCalled();
     expect(focus).toBeCalled();
-    expect(result.current.control._formState.val.errors?.test?.type).toBe(
+    expect(result.current.control._formState.errors?.test?.type).toBe(
       'required',
     );
   });
@@ -149,7 +182,7 @@ describe('handleSubmit', () => {
 
     expect(callback).not.toBeCalled();
     expect(mockFocus).not.toBeCalled();
-    expect(result.current.control._formState.val.errors?.test?.type).toBe(
+    expect(result.current.control._formState.errors?.test?.type).toBe(
       'required',
     );
   });
@@ -360,5 +393,151 @@ describe('handleSubmit', () => {
       expect(onValidCallback).not.toBeCalledTimes(1);
       expect(onInvalidCallback).toBeCalledTimes(1);
     });
+  });
+
+  it('should not provide internal errors reference to onInvalid callback', async () => {
+    const { result } = renderHook(() =>
+      useForm<{
+        test: string;
+      }>(),
+    );
+    result.current.register('test', { required: true });
+
+    await act(async () => {
+      await result.current.handleSubmit(
+        () => {},
+        (errors) => {
+          Object.freeze(errors);
+        },
+      )({
+        preventDefault: () => {},
+        persist: () => {},
+      } as React.SyntheticEvent);
+    });
+
+    await act(async () => {
+      expect(() =>
+        result.current.setError('test', { message: 'Not enough', type: 'min' }),
+      ).not.toThrow();
+    });
+  });
+
+  it('should be able to submit correctly when errors contains empty array object', async () => {
+    const onSubmit = jest.fn();
+
+    const App = () => {
+      const { register, control, handleSubmit } = useForm({
+        defaultValues: {
+          test: [{ name: '1234' }],
+        },
+        mode: 'onChange',
+      });
+      const { fields, remove } = useFieldArray({ control, name: 'test' });
+
+      return (
+        <form
+          onSubmit={handleSubmit(() => {
+            onSubmit();
+          })}
+        >
+          {fields.map((field, index) => {
+            return (
+              <input
+                key={field.id}
+                {...register(`test.${index}.name`, { required: true })}
+              />
+            );
+          })}
+
+          <button type={'button'} onClick={() => remove(0)}>
+            remove
+          </button>
+          <button>submit</button>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    await actComponent(async () => {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: {
+          value: '',
+        },
+      });
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'remove' }));
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    });
+
+    expect(onSubmit).not.toBeCalled();
+  });
+
+  it('should be able to submit correctly when errors contains empty array object and errros state is subscribed', async () => {
+    const onSubmit = jest.fn();
+
+    const App = () => {
+      const {
+        register,
+        control,
+        handleSubmit,
+        formState: { errors },
+      } = useForm({
+        defaultValues: {
+          test: [{ name: '1234' }],
+        },
+        mode: 'onChange',
+      });
+      const { fields, remove } = useFieldArray({ control, name: 'test' });
+
+      errors;
+
+      return (
+        <form
+          onSubmit={handleSubmit(() => {
+            onSubmit();
+          })}
+        >
+          {fields.map((field, index) => {
+            return (
+              <input
+                key={field.id}
+                {...register(`test.${index}.name`, { required: true })}
+              />
+            );
+          })}
+
+          <button type={'button'} onClick={() => remove(0)}>
+            remove
+          </button>
+          <button>submit</button>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    await actComponent(async () => {
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: {
+          value: '',
+        },
+      });
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'remove' }));
+    });
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    });
+
+    expect(onSubmit).toBeCalled();
   });
 });

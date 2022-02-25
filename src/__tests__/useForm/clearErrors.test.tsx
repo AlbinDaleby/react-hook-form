@@ -1,9 +1,10 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
   render,
   screen,
+  waitFor,
 } from '@testing-library/react';
 import { act, renderHook } from '@testing-library/react-hooks';
 
@@ -217,5 +218,56 @@ describe('clearErrors', () => {
 
     await act(async () => await result.current.handleSubmit(submit)());
     expect(submit).toBeCalled();
+  });
+
+  it('should update isValid to true with setError', async () => {
+    const App = () => {
+      const {
+        formState: { isValid },
+        setError,
+        clearErrors,
+      } = useForm({
+        mode: 'onChange',
+      });
+
+      return (
+        <div>
+          <button
+            onClick={() => {
+              setError('test', { type: 'test' });
+            }}
+          >
+            setError
+          </button>
+
+          <button
+            onClick={() => {
+              clearErrors();
+            }}
+          >
+            clearError
+          </button>
+          {isValid ? 'yes' : 'no'}
+        </div>
+      );
+    };
+
+    render(<App />);
+
+    await waitFor(() => {
+      screen.getByText('yes');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'setError' }));
+
+    await waitFor(() => {
+      screen.getByText('no');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'clearError' }));
+
+    await waitFor(() => {
+      screen.getByText('no');
+    });
   });
 });

@@ -1,8 +1,396 @@
 # Changelog
 
+## [7.25.2] - 2022-1-29
+
+## Changed
+
+- `onTouched` mode will honor `focusout` event
+
+## [7.25.0] - 2022-1-22
+
+## Added
+
+- `getFieldState` get individual field state
+
+```tsx
+export default function App() {
+  const {
+    register,
+    getFieldState,
+    formState: { isDirty, isValid },
+  } = useForm({
+    mode: 'onChange',
+    defaultValues: {
+      firstName: '',
+    },
+  });
+
+  // you can invoke before render or within the render function
+  const fieldState = getFieldState('firstName');
+
+  return (
+    <form>
+      <input {...register('firstName', { required: true })} />
+      <p>{getFieldState('firstName').isDirty && 'dirty'}</p>
+      <p>{getFieldState('firstName').isTouched && 'touched'}</p>
+      <button
+        type="button"
+        onClick={() => console.log(getFieldState('firstName'))}
+      >
+        field state
+      </button>
+    </form>
+  );
+}
+```
+
+## [7.24.0] - 2022-1-14
+
+## Changed
+
+- `useController` return prop: `onChange`, `onBlur` and `ref` will be memorized with `useCallback`
+
+## [7.23.0] - 2022-1-12
+
+## Changed
+
+- `useFieldArray` change `keyName` is no longer required when field value contains `id`
+
+```tsx
+const App = () => {
+  const { control, register, handleSubmit } = useForm<FormValues>({
+    defaultValues: {
+      test: [{ id: 'UUID5678', test: 'data' }], // id value will be retained
+    },
+  });
+  const { fields, append } = useFieldArray({
+    control,
+    name: 'test',
+  });
+
+  return (
+    <form>
+      {fields.map((field, index) => {
+        return <input key={field.id} {...register(`test.${index}.test`)} />;
+      })}
+
+      <button
+        type={'button'}
+        onClick={() => {
+          append({
+            id: 'UUID1234', // id value will be retained
+            test: '1234',
+          });
+        }}
+      >
+        append
+      </button>
+    </form>
+  );
+};
+```
+
+- `useFormState` will no longer fire state update after hook unmount
+- `UseFormHandleSubmit` type will infer formValues
+
+## [7.22.0] - 2021-12-14
+
+## Changed
+
+- Browser native reset API will no longer be invoked when `reset` provided with value
+
+```tsx
+const onSubmit = (data) => {};
+
+React.useEffect(() => {
+  if (formState.isSubmitSuccessful) {
+    reset({ something: '' });
+  }
+}, [formState, reset]);
+
+handleSubmit(onSubmit);
+```
+
+to
+
+```tsx
+const onSubmit = (data) => {
+  setSubmittedData(data);
+  reset(data); // no longer need to have useEffect
+};
+
+handleSubmit(onSubmit);
+```
+
+## [7.21.0] - 2021-12-06
+
+## Changed
+
+- `shouldUseNativeValidation` will pass down validation props both at client and server render
+
+```tsx
+const { register } = useForm()
+
+<input {...register('name', { required: true })} />
+
+<input name="name" required /> // both client and server render
+```
+
+## [7.20.3] - 2021-11-26
+
+## Changed
+
+- register `onChange` will share same logic with `useController` for non standard event payload
+
+```tsx
+const { onChange } = register('test');
+onChange('stringIsValid'); // this is only valid use case for JS
+```
+
+- empty node in `formState` will no longer gets unset
+
+## [7.20.0] - 2021-11-19
+
+## Added
+
+- new `exact` prop for `useWatch`
+- new `exact` prop for `useFormState`
+
+```tsx
+useWatch({
+  name: 'test.test',
+  exact: true,
+});
+
+useFormState({
+  name: 'test.test',
+  exact: true,
+});
+```
+
+## Changed
+
+- `useWatch` subscription will occurred at `useEffect` instead before `render`
+
+## [7.19.0] - 2021-11-05
+
+## Added
+
+- new `resetField` API
+
+```tsx
+const { resetField } = useForm();
+
+resetField('test');
+
+resetField('test', {
+  keepError: true,
+  keepDirty: true,
+  keepTouched: true,
+  defaultValue: 'test1',
+});
+```
+
+## [7.18.1] - 2021-11-02
+
+- revert `FieldPathWithValue`
+
+## [7.18.0] - 2021-10-28
+
+## Added
+
+- bring back `FieldPathWithValue`
+- schema errors parent object look up
+
+```tsx
+const validationSchema = object().shape({
+  questions: array().min(1, 'Array cannot be empty'),
+});
+
+// the above schema will be picked up by field array action
+// the logic applies to group error object eg checkboxes
+<button
+  type="button"
+  onClick={() => {
+    remove(questionIndex);
+  }}
+>
+  Remove
+</button>;
+```
+
+## [7.17.0] - 2021-10-02
+
+## Added
+
+- new type `FieldPathWithValue` to improve generic components type support
+
+```tsx
+type ExpectedType = { test: string };
+
+const Generic = <FormValues extends FieldValues>({
+  name,
+  control,
+}: {
+  name: FieldPathWithValue<FormValues, ExpectedType>;
+  control: Control<FormValues>;
+}) => {
+  const {
+    field: { value, ...fieldProps },
+  } = useController<FormValues, ExpectedType>({
+    name,
+    control,
+    defaultValue: { test: 'value' },
+  });
+
+  return <input type="text" value={value.test} {...fieldProps} />;
+};
+```
+
+## [7.16.1] - 2021-09-27
+
+## Changed
+
+- `formState` subscription no longer subscribed at `useEffect` instead the execution of each hook
+
+## [7.16.0] - 2021-09-25
+
+## Added
+
+- `register` allowed pass custom `onChange` and `onBlur`
+
+```tsx
+<input
+  type="text"
+  {...register('test', {
+    onChange: (e) => {},
+    onBlur: (e) => {},
+  })}
+/>
+```
+
+## [7.15.0] - 2021-09-05
+
+## Added
+
+- `useFieldArray` new method `replace()`
+
+```tsx
+const { control } = useForm({
+  defaultValues: {
+    test: [{ value: 'lorem' }, { value: 'ipsum' }],
+  },
+});
+const { fields, replace } = useFieldArray({
+  control,
+  name: 'test',
+});
+
+const handleFullyReplacement = (): void => {
+  // remove old and set fully new values
+  replace([{ value: 'dolor' }, { value: 'sit' }, { value: 'amet' }]);
+};
+```
+
+- Improved to not map types defined with `interface`.
+
+```tsx
+import { useForm } from 'react-hook-form';
+
+interface CustomValue {
+  custom: string;
+}
+
+type FormValues = {
+  fieldName: CustomValue;
+};
+
+const { formState: errors } = useForm<FormValues>({
+  defaultValues: { fieldName: { custom: 'value' } },
+});
+```
+
+## [7.14.0] - 2021-08-27
+
+## Added
+
+- `register` add dependent validation
+
+```tsx
+const App = () => {
+  const { register, getValues } = useForm();
+
+  return (
+    <form>
+      <input
+        {...register('firstName', {
+          validate: (value) => {
+            return getValues('lastName') === value;
+          },
+        })}
+      />
+      <input {...register('lastName', { deps: ['firstName'] })} /> // dependant validation
+    </form>
+  );
+};
+```
+
+## [7.13.0] - 2021-08-22
+
+## Added
+
+`Trigger`
+
+- Trigger will enable object name trigger and field array name trigger
+
+```tsx
+useFieldArray({ name: 'test' });
+
+trigger('name'); // will trigger the whole field array to validate
+```
+
+`register`
+
+- added a `disabled` prop as an option to toggle input disable attribute
+- register will be able to seek input DOM reference through the `ref` callback
+
+```tsx
+register('test', { disabled: true }) // will set value to undefined and pass disabled down to the input attribute
+
+<div {...register('test')}>
+  <input name="test" /> // this input will be registered
+</div>
+```
+
+`useWatch`
+
+- added `disabled` prop to toggle the state subscription.
+
+```tsx
+useWatch({ disabled: true }); // you toggle the subscription
+```
+
+`useFormState`
+
+- added `disabled` prop to toggle the state subscription.
+
+```tsx
+useFormState({ disabled: true }); // you toggle the subscription
+```
+
+`setValue`
+
+- allow set value for non-registered inputs include nested object and array field.
+
+```tsx
+<input {...register('test.0.firstName')} />
+
+setValue('test', [{ firstName: 'bill' }, {firstName: 'kotaro}, {firstName: 'joris'}]) // this will works
+```
+
 ## [7.12.0] - 2021-07-24
 
-## Add
+## Added
 
 - new `useForm` config `delayError`
 
@@ -14,7 +402,7 @@ useForm({
 
 ## [7.11.0] - 2021-07-13
 
-## Add
+## Added
 
 - `update` method to update an field array inputs
 
@@ -32,7 +420,7 @@ update(0, data); // update an individual field array node
 
 ## [7.9.0] - 2021-06-19
 
-## Add
+## Added
 
 - new config at `useForm` to enabled native browser validation
 
@@ -531,7 +919,7 @@ function Input({ control, name }) {
 ```tsx
 useWatch({
   name: 'test',
-  defaultValue: 'data', // this value will only show on the inital render
+  defaultValue: 'data', // this value will only show on the initial render
 });
 ```
 

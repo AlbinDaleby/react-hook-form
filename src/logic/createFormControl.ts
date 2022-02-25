@@ -4,8 +4,10 @@ import {
   ChangeHandler,
   DeepPartial,
   DelayCallback,
+  EventType,
   Field,
   FieldError,
+  FieldErrors,
   FieldNamesMarkedBoolean,
   FieldPath,
   FieldRefs,
@@ -15,22 +17,20 @@ import {
   InternalFieldName,
   Names,
   Path,
-  PathValue,
   Ref,
-  RegisterOptions,
   ResolverResult,
   SetFieldValue,
   SetValueConfig,
   Subjects,
   UnpackNestedValue,
-  UpdateValues,
   UseFormClearErrors,
+  UseFormGetFieldState,
   UseFormGetValues,
   UseFormHandleSubmit,
   UseFormProps,
   UseFormRegister,
-  UseFormRegisterReturn,
   UseFormReset,
+  UseFormResetField,
   UseFormReturn,
   UseFormSetError,
   UseFormSetFocus,
@@ -41,13 +41,14 @@ import {
   WatchInternal,
   WatchObserver,
 } from '../types';
-import { set } from '../utils';
 import cloneObject from '../utils/cloneObject';
 import compact from '../utils/compact';
 import convertToArrayPayload from '../utils/convertToArrayPayload';
+import createSubject from '../utils/createSubject';
 import deepEqual from '../utils/deepEqual';
 import get from '../utils/get';
 import getValidationModes from '../utils/getValidationModes';
+import isBoolean from '../utils/isBoolean';
 import isCheckBoxInput from '../utils/isCheckBoxInput';
 import isDateObject from '../utils/isDateObject';
 import isEmptyObject from '../utils/isEmptyObject';
@@ -56,27 +57,28 @@ import isFunction from '../utils/isFunction';
 import isHTMLElement from '../utils/isHTMLElement';
 import isMultipleSelect from '../utils/isMultipleSelect';
 import isNullOrUndefined from '../utils/isNullOrUndefined';
-import isObject from '../utils/isObject';
 import isPrimitive from '../utils/isPrimitive';
-import isRadioOrCheckboxFunction from '../utils/isRadioOrCheckbox';
+import isRadioOrCheckbox from '../utils/isRadioOrCheckbox';
 import isString from '../utils/isString';
 import isUndefined from '../utils/isUndefined';
 import isWeb from '../utils/isWeb';
 import live from '../utils/live';
 import omit from '../utils/omit';
-import omitKey from '../utils/omitKeys';
-import omitKeys from '../utils/omitKeys';
-import Subject from '../utils/Subject';
+import set from '../utils/set';
 import unset from '../utils/unset';
 
 import focusFieldBy from './focusFieldBy';
+import generateWatchOutput from './generateWatchOutput';
+import getDirtyFields from './getDirtyFields';
+import getEventValue from './getEventValue';
 import getFieldValue from './getFieldValue';
 import getFieldValueAs from './getFieldValueAs';
-import getNodeParentName from './getNodeParentName';
 import getResolverOptions from './getResolverOptions';
+import getRuleValue from './getRuleValue';
 import hasValidation from './hasValidation';
 import isNameInFieldArray from './isNameInFieldArray';
-import setFieldArrayDirtyFields from './setFieldArrayDirtyFields';
+import isWatched from './isWatched';
+import schemaErrorLookup from './schemaErrorLookup';
 import skipValidation from './skipValidation';
 import unsetEmptyArray from './unsetEmptyArray';
 import validateField from './validateField';
@@ -88,45 +90,48 @@ const defaultOptions = {
   shouldUnregister: true,
 } as const;
 
-const isWindowUndefined = typeof window === 'undefined';
-
 export function createFormControl<
   TFieldValues extends FieldValues = FieldValues,
   TContext extends object = object,
 >(
   props: UseFormProps<TFieldValues, TContext> = {},
 ): Omit<UseFormReturn<TFieldValues, TContext>, 'formState'> {
-  let formOptions = {
+  let _options = {
     ...defaultOptions,
     ...props,
   };
-  let _delayCallback: DelayCallback;
-  let _formState = {
+  let _formState: FormState<TFieldValues> = {
     isDirty: false,
     isValidating: false,
-    dirtyFields: {},
+    dirtyFields: {} as FieldNamesMarkedBoolean<TFieldValues>,
     isSubmitted: false,
     submitCount: 0,
     resetCount: 0,
-    touchedFields: {},
+    touchedFields: {} as FieldNamesMarkedBoolean<TFieldValues>,
     isSubmitting: false,
     isSubmitSuccessful: false,
     isValid: false,
-    errors: {},
+    errors: {} as FieldErrors<TFieldValues>,
   };
   let _fields = {};
-  let _formValues = {};
-  let _defaultValues = formOptions.defaultValues || {};
-  let _isInAction = false;
-  let _isMounted = false;
-  let _timer = 0;
+  let _defaultValues = _options.defaultValues || {};
+  let _formValues = _options.shouldUnregister
+    ? {}
+    : cloneObject(_defaultValues);
+  let _stateFlags = {
+    action: false,
+    mount: false,
+    watch: false,
+  };
   let _names: Names = {
     mount: new Set(),
     unMount: new Set(),
     array: new Set(),
     watch: new Set(),
   } as Names;
-  let _validateCount: Record<InternalFieldName, number> = {};
+  let delayErrorCallback: DelayCallback;
+  let timer = 0;
+  let validateFields: Record<InternalFieldName, number> = {};
   const _proxyFormState = {
     isDirty: false,
     dirtyFields: false,
@@ -136,76 +141,221 @@ export function createFormControl<
     errors: false,
   };
   const _subjects: Subjects<TFieldValues> = {
-    watch: new Subject(),
-    control: new Subject(),
-    array: new Subject(),
-    state: new Subject(),
+    watch: createSubject(),
+    array: createSubject(),
+    state: createSubject(),
   };
 
-  const validationMode = getValidationModes(formOptions.mode);
-  const isValidateAllFieldCriteria =
-    formOptions.criteriaMode === VALIDATION_MODE.all;
+  const validationModeBeforeSubmit = getValidationModes(_options.mode);
+  const validationModeAfterSubmit = getValidationModes(_options.reValidateMode);
+  const shouldDisplayAllAssociatedErrors =
+    _options.criteriaMode === VALIDATION_MODE.all;
 
   const debounce =
     <T extends Function>(callback: T, wait: number) =>
     (...args: any) => {
-      clearTimeout(_timer);
-      _timer = window.setTimeout(() => callback(...args), wait);
+      clearTimeout(timer);
+      timer = window.setTimeout(() => callback(...args), wait);
     };
 
-  const isFieldWatched = (name: FieldPath<TFieldValues>) =>
-    _names.watchAll ||
-    _names.watch.has(name) ||
-    _names.watch.has((name.match(/\w+/) || [])[0]);
+  const _updateValid = async (shouldSkipRender?: boolean) => {
+    let isValid = false;
 
-  const updateErrorState = (name: InternalFieldName, error: FieldError) => {
-    set(_formState.errors, name, error);
+    if (_proxyFormState.isValid) {
+      isValid = _options.resolver
+        ? isEmptyObject((await _executeSchema()).errors)
+        : await executeBuildInValidation(_fields, true);
 
-    _subjects.state.next({
-      errors: _formState.errors,
-    });
+      if (!shouldSkipRender && isValid !== _formState.isValid) {
+        _formState.isValid = isValid;
+        _subjects.state.next({
+          isValid,
+        });
+      }
+    }
+
+    return isValid;
   };
 
-  const shouldRenderBaseOnError = async (
+  const _updateFieldArray: BatchFieldArrayUpdate = (
+    name,
+    values = [],
+    method,
+    args,
+    shouldSetValues = true,
+    shouldUpdateFieldsAndErrors = true,
+  ) => {
+    if (args && method) {
+      _stateFlags.action = true;
+      if (shouldUpdateFieldsAndErrors && Array.isArray(get(_fields, name))) {
+        const fieldValues = method(get(_fields, name), args.argA, args.argB);
+        shouldSetValues && set(_fields, name, fieldValues);
+      }
+
+      if (
+        _proxyFormState.errors &&
+        shouldUpdateFieldsAndErrors &&
+        Array.isArray(get(_formState.errors, name))
+      ) {
+        const errors = method(
+          get(_formState.errors, name),
+          args.argA,
+          args.argB,
+        );
+        shouldSetValues && set(_formState.errors, name, errors);
+        unsetEmptyArray(_formState.errors, name);
+      }
+
+      if (
+        _proxyFormState.touchedFields &&
+        Array.isArray(get(_formState.touchedFields, name))
+      ) {
+        const touchedFields = method(
+          get(_formState.touchedFields, name),
+          args.argA,
+          args.argB,
+        );
+        shouldSetValues && set(_formState.touchedFields, name, touchedFields);
+      }
+
+      if (_proxyFormState.dirtyFields) {
+        _formState.dirtyFields = getDirtyFields(_defaultValues, _formValues);
+      }
+
+      _subjects.state.next({
+        isDirty: _getDirty(name, values),
+        dirtyFields: _formState.dirtyFields,
+        errors: _formState.errors,
+        isValid: _formState.isValid,
+      });
+    } else {
+      set(_formValues, name, values);
+    }
+  };
+
+  const updateErrors = (name: InternalFieldName, error: FieldError) => (
+    set(_formState.errors, name, error),
+    _subjects.state.next({
+      errors: _formState.errors,
+    })
+  );
+
+  const updateValidAndValue = (
+    name: InternalFieldName,
+    shouldSkipSetValueAs: boolean,
+    value?: unknown,
+    ref?: Ref,
+  ) => {
+    const field: Field = get(_fields, name);
+
+    if (field) {
+      const defaultValue = get(
+        _formValues,
+        name,
+        isUndefined(value) ? get(_defaultValues, name) : value,
+      );
+
+      isUndefined(defaultValue) ||
+      (ref && (ref as HTMLInputElement).defaultChecked) ||
+      shouldSkipSetValueAs
+        ? set(
+            _formValues,
+            name,
+            shouldSkipSetValueAs ? defaultValue : getFieldValue(field._f),
+          )
+        : setFieldValue(name, defaultValue);
+
+      _stateFlags.mount && _updateValid();
+    }
+  };
+
+  const updateTouchAndDirty = (
+    name: InternalFieldName,
+    fieldValue: unknown,
+    isBlurEvent?: boolean,
+    shouldDirty?: boolean,
+    shouldRender?: boolean,
+  ): Partial<
+    Pick<FormState<TFieldValues>, 'dirtyFields' | 'isDirty' | 'touchedFields'>
+  > => {
+    let isFieldDirty = false;
+    const output: Partial<FormState<TFieldValues>> & { name: string } = {
+      name,
+    };
+    const isPreviousFieldTouched = get(_formState.touchedFields, name);
+
+    if (_proxyFormState.isDirty) {
+      const isPreviousFormDirty = _formState.isDirty;
+
+      _formState.isDirty = output.isDirty = _getDirty();
+      isFieldDirty = isPreviousFormDirty !== output.isDirty;
+    }
+
+    if (_proxyFormState.dirtyFields && (!isBlurEvent || shouldDirty)) {
+      const isPreviousFieldDirty = get(_formState.dirtyFields, name);
+      const isCurrentFieldPristine = deepEqual(
+        get(_defaultValues, name),
+        fieldValue,
+      );
+
+      isCurrentFieldPristine
+        ? unset(_formState.dirtyFields, name)
+        : set(_formState.dirtyFields as TFieldValues, name, true);
+      output.dirtyFields = _formState.dirtyFields;
+      isFieldDirty =
+        isFieldDirty ||
+        isPreviousFieldDirty !== get(_formState.dirtyFields, name);
+    }
+
+    if (isBlurEvent && !isPreviousFieldTouched) {
+      set(_formState.touchedFields as TFieldValues, name, isBlurEvent);
+      output.touchedFields = _formState.touchedFields;
+      isFieldDirty =
+        isFieldDirty ||
+        (_proxyFormState.touchedFields &&
+          isPreviousFieldTouched !== isBlurEvent);
+    }
+
+    isFieldDirty && shouldRender && _subjects.state.next(output);
+
+    return isFieldDirty ? output : {};
+  };
+
+  const shouldRenderByError = async (
     shouldSkipRender: boolean,
     name: InternalFieldName,
+    isValid: boolean,
     error?: FieldError,
     fieldState?: {
       dirty?: FieldNamesMarkedBoolean<TFieldValues>;
       isDirty?: boolean;
       touched?: FieldNamesMarkedBoolean<TFieldValues>;
     },
-    isValidFromResolver?: boolean,
-    isWatched?: boolean,
   ): Promise<void> => {
-    const previousError = get(_formState.errors, name);
-    const isValid = !!(
-      _proxyFormState.isValid &&
-      (formOptions.resolver ? isValidFromResolver : _updateValid())
-    );
+    const previousFieldError = get(_formState.errors, name);
+    const shouldUpdateValid =
+      _proxyFormState.isValid && _formState.isValid !== isValid;
 
     if (props.delayError && error) {
-      _delayCallback =
-        _delayCallback || debounce(updateErrorState, props.delayError);
-
-      _delayCallback(name, error);
+      delayErrorCallback =
+        delayErrorCallback || debounce(updateErrors, props.delayError);
+      delayErrorCallback(name, error);
     } else {
-      clearTimeout(_timer);
+      clearTimeout(timer);
       error
         ? set(_formState.errors, name, error)
         : unset(_formState.errors, name);
     }
 
     if (
-      (isWatched ||
-        (error ? !deepEqual(previousError, error) : previousError) ||
+      ((error ? !deepEqual(previousFieldError, error) : previousFieldError) ||
         !isEmptyObject(fieldState) ||
-        (formOptions.resolver && _formState.isValid !== isValid)) &&
+        shouldUpdateValid) &&
       !shouldSkipRender
     ) {
       const updatedFormState = {
         ...fieldState,
-        ...(_proxyFormState.isValid && formOptions.resolver ? { isValid } : {}),
+        ...(shouldUpdateValid ? { isValid } : {}),
         errors: _formState.errors,
         name,
       };
@@ -215,150 +365,38 @@ export function createFormControl<
         ...updatedFormState,
       };
 
-      _subjects.state.next(isWatched ? { name } : updatedFormState);
+      _subjects.state.next(updatedFormState);
     }
 
-    _validateCount[name]--;
+    validateFields[name]--;
 
-    if (!_validateCount[name]) {
+    if (
+      _proxyFormState.isValidating &&
+      !Object.values(validateFields).some((v) => v)
+    ) {
       _subjects.state.next({
         isValidating: false,
       });
-      _validateCount = {};
+      validateFields = {};
     }
   };
 
-  const setFieldValue = (
-    name: InternalFieldName,
-    value: SetFieldValue<TFieldValues>,
-    options: SetValueConfig = {},
-    shouldRender?: boolean,
-  ) => {
-    const field: Field = get(_fields, name);
-
-    if (field) {
-      const _f = field._f;
-
-      if (_f) {
-        set(_formValues, name, getFieldValueAs(value, _f));
-
-        const fieldValue =
-          isWeb && isHTMLElement(_f.ref) && isNullOrUndefined(value)
-            ? ''
-            : value;
-
-        if (isFileInput(_f.ref) && !isString(fieldValue)) {
-          _f.ref.files = fieldValue as FileList;
-        } else if (isMultipleSelect(_f.ref)) {
-          [..._f.ref.options].forEach(
-            (selectRef) =>
-              (selectRef.selected = (
-                fieldValue as InternalFieldName[]
-              ).includes(selectRef.value)),
-          );
-        } else if (_f.refs) {
-          if (isCheckBoxInput(_f.ref)) {
-            _f.refs.length > 1
-              ? _f.refs.forEach(
-                  (checkboxRef) =>
-                    (checkboxRef.checked = Array.isArray(fieldValue)
-                      ? !!(fieldValue as []).find(
-                          (data: string) => data === checkboxRef.value,
-                        )
-                      : fieldValue === checkboxRef.value),
-                )
-              : (_f.refs[0].checked = !!fieldValue);
-          } else {
-            _f.refs.forEach(
-              (radioRef: HTMLInputElement) =>
-                (radioRef.checked = radioRef.value === fieldValue),
-            );
-          }
-        } else {
-          _f.ref.value = fieldValue;
-        }
-
-        if (shouldRender) {
-          _subjects.control.next({
-            values: getValues(),
-            name,
-          });
-        }
-
-        (options.shouldDirty || options.shouldTouch) &&
-          updateTouchAndDirtyState(name, fieldValue, options.shouldTouch);
-        options.shouldValidate && trigger(name as Path<TFieldValues>);
-      }
-    }
-  };
-
-  const updateTouchAndDirtyState = (
-    name: InternalFieldName,
-    inputValue: unknown,
-    isCurrentTouched?: boolean,
-    shouldRender = true,
-  ): Partial<
-    Pick<FormState<TFieldValues>, 'dirtyFields' | 'isDirty' | 'touchedFields'>
-  > => {
-    const state: Partial<FormState<TFieldValues>> & { name: string } = {
-      name,
-    };
-    let isChanged = false;
-
-    if (_proxyFormState.isDirty) {
-      const previousIsDirty = _formState.isDirty;
-      _formState.isDirty = _getIsDirty();
-      state.isDirty = _formState.isDirty;
-      isChanged = previousIsDirty !== state.isDirty;
-    }
-
-    if (_proxyFormState.dirtyFields && !isCurrentTouched) {
-      const isPreviousFieldDirty = get(_formState.dirtyFields, name);
-      const isCurrentFieldDirty = !deepEqual(
-        get(_defaultValues, name),
-        inputValue,
-      );
-      isCurrentFieldDirty
-        ? set(_formState.dirtyFields, name, true)
-        : unset(_formState.dirtyFields, name);
-      state.dirtyFields = _formState.dirtyFields;
-      isChanged =
-        isChanged || isPreviousFieldDirty !== get(_formState.dirtyFields, name);
-    }
-
-    const isPreviousFieldTouched = get(_formState.touchedFields, name);
-
-    if (isCurrentTouched && !isPreviousFieldTouched) {
-      set(_formState.touchedFields, name, isCurrentTouched);
-      state.touchedFields = _formState.touchedFields;
-      isChanged =
-        isChanged ||
-        (_proxyFormState.touchedFields &&
-          isPreviousFieldTouched !== isCurrentTouched);
-    }
-
-    isChanged && shouldRender && _subjects.state.next(state);
-
-    return isChanged ? state : {};
-  };
-
-  const executeResolver = async (name?: InternalFieldName[]) => {
-    return formOptions.resolver
-      ? await formOptions.resolver(
+  const _executeSchema = async (name?: InternalFieldName[]) =>
+    _options.resolver
+      ? await _options.resolver(
           { ..._formValues } as UnpackNestedValue<TFieldValues>,
-          formOptions.context,
+          _options.context,
           getResolverOptions(
             name || _names.mount,
             _fields,
-            formOptions.criteriaMode,
-            formOptions.shouldUseNativeValidation,
+            _options.criteriaMode,
+            _options.shouldUseNativeValidation,
           ),
         )
-      : ({} as ResolverResult);
-  };
+      : ({} as ResolverResult<TFieldValues>);
 
-  const executeResolverValidation = async (names?: InternalFieldName[]) => {
-    const { errors } = await executeResolver();
+  const executeSchemaAndUpdateState = async (names?: InternalFieldName[]) => {
+    const { errors } = await _executeSchema();
 
     if (names) {
       for (const name of names) {
@@ -368,369 +406,207 @@ export function createFormControl<
           : unset(_formState.errors, name);
       }
     } else {
-      _formState.errors = errors;
+      _formState.errors = errors as FieldErrors<TFieldValues>;
     }
 
     return errors;
   };
 
-  const validateForm = async (
-    _fields: FieldRefs,
-    shouldCheckValid?: boolean,
+  const executeBuildInValidation = async (
+    fields: FieldRefs,
+    shouldOnlyCheckValid?: boolean,
     context = {
       valid: true,
     },
   ) => {
-    for (const name in _fields) {
-      const field = _fields[name];
+    for (const name in fields) {
+      const field = fields[name];
 
       if (field) {
-        const _f = field._f;
-        const val = omit(field, '_f');
+        const fieldReference = field._f;
+        const fieldValue = omit(field, '_f');
 
-        if (_f) {
+        if (fieldReference) {
           const fieldError = await validateField(
             field,
-            get(_formValues, _f.name),
-            isValidateAllFieldCriteria,
-            formOptions.shouldUseNativeValidation,
+            get(_formValues, fieldReference.name),
+            shouldDisplayAllAssociatedErrors,
+            _options.shouldUseNativeValidation,
           );
 
-          if (shouldCheckValid) {
-            if (fieldError[_f.name]) {
-              context.valid = false;
+          if (fieldError[fieldReference.name]) {
+            context.valid = false;
+
+            if (shouldOnlyCheckValid) {
               break;
             }
-          } else {
-            if (fieldError[_f.name]) {
-              context.valid = false;
-            }
-            fieldError[_f.name]
-              ? set(_formState.errors, _f.name, fieldError[_f.name])
-              : unset(_formState.errors, _f.name);
+          }
+
+          if (!shouldOnlyCheckValid) {
+            fieldError[fieldReference.name]
+              ? set(
+                  _formState.errors,
+                  fieldReference.name,
+                  fieldError[fieldReference.name],
+                )
+              : unset(_formState.errors, fieldReference.name);
           }
         }
 
-        val && (await validateForm(val, shouldCheckValid, context));
+        fieldValue &&
+          (await executeBuildInValidation(
+            fieldValue,
+            shouldOnlyCheckValid,
+            context,
+          ));
       }
     }
 
     return context.valid;
   };
 
-  const handleChange: ChangeHandler = async ({
-    type,
-    target,
-    target: { value, name, type: inputType },
-  }) => {
-    let error;
-    let isValid;
-    const field = get(_fields, name) as Field;
+  const _removeUnmounted = () => {
+    for (const name of _names.unMount) {
+      const field: Field = get(_fields, name);
 
-    if (field) {
-      let inputValue = inputType ? getFieldValue(field) : undefined;
-      inputValue = isUndefined(inputValue) ? value : inputValue;
-
-      const isBlurEvent = type === EVENTS.BLUR;
-      const { isOnBlur: isReValidateOnBlur, isOnChange: isReValidateOnChange } =
-        getValidationModes(formOptions.reValidateMode);
-
-      const shouldSkipValidation =
-        (!hasValidation(field._f, field._f.mount) &&
-          !formOptions.resolver &&
-          !get(_formState.errors, name) &&
-          !field._f.deps) ||
-        skipValidation({
-          isBlurEvent,
-          isTouched: !!get(_formState.touchedFields, name),
-          isSubmitted: _formState.isSubmitted,
-          isReValidateOnBlur,
-          isReValidateOnChange,
-          ...validationMode,
-        });
-      const isWatched =
-        !isBlurEvent && isFieldWatched(name as FieldPath<TFieldValues>);
-
-      if (!isUndefined(inputValue)) {
-        set(_formValues, name, inputValue);
-      }
-
-      const fieldState = updateTouchAndDirtyState(
-        name,
-        inputValue,
-        isBlurEvent,
-        false,
-      );
-
-      const shouldRender = !isEmptyObject(fieldState) || isWatched;
-
-      if (shouldSkipValidation) {
-        !isBlurEvent &&
-          _subjects.watch.next({
-            name,
-            type,
-          });
-        return (
-          shouldRender &&
-          _subjects.state.next(isWatched ? { name } : { ...fieldState, name })
-        );
-      }
-
-      _validateCount[name] = _validateCount[name] ? +1 : 1;
-
-      _subjects.state.next({
-        isValidating: true,
-      });
-
-      if (formOptions.resolver) {
-        const { errors } = await executeResolver([name]);
-        error = get(errors, name);
-
-        if (isCheckBoxInput(target as Ref) && !error) {
-          const parentNodeName = getNodeParentName(name);
-          const valError = get(errors, parentNodeName, {});
-          valError.type && valError.message && (error = valError);
-
-          if (valError || get(_formState.errors, parentNodeName)) {
-            name = parentNodeName;
-          }
-        }
-
-        isValid = isEmptyObject(errors);
-      } else {
-        error = (
-          await validateField(
-            field,
-            get(_formValues, name) as Field,
-            isValidateAllFieldCriteria,
-            formOptions.shouldUseNativeValidation,
-          )
-        )[name];
-      }
-
-      !isBlurEvent &&
-        _subjects.watch.next({
-          name,
-          type,
-          values: getValues(),
-        });
-
-      if (field._f.deps) {
-        trigger(field._f.deps as FieldPath<TFieldValues>[]);
-      }
-
-      shouldRenderBaseOnError(
-        false,
-        name,
-        error,
-        fieldState,
-        isValid,
-        isWatched,
-      );
-    }
-  };
-
-  const _updateValidAndInputValue = (
-    name: InternalFieldName,
-    ref?: Ref,
-    shouldSkipValueAs?: boolean,
-  ) => {
-    const field = get(_fields, name) as Field;
-
-    if (field) {
-      const fieldValue = get(_formValues, name);
-      const isValueUndefined = isUndefined(fieldValue);
-      const defaultValue = isValueUndefined
-        ? get(_defaultValues, name)
-        : fieldValue;
-
-      if (
-        isUndefined(defaultValue) ||
-        (ref && (ref as HTMLInputElement).defaultChecked) ||
-        shouldSkipValueAs
-      ) {
-        set(
-          _formValues,
-          name,
-          shouldSkipValueAs ? defaultValue : getFieldValue(field),
-        );
-      } else {
-        setFieldValue(name, defaultValue);
-      }
+      field &&
+        (field._f.refs
+          ? field._f.refs.every((ref) => !live(ref))
+          : !live(field._f.ref)) &&
+        unregister(name as FieldPath<TFieldValues>);
     }
 
-    _isMounted && _proxyFormState.isValid && _updateValid();
+    _names.unMount = new Set();
   };
 
-  const _getIsDirty: GetIsDirty = (name, data) => {
-    name && data && set(_formValues, name, data);
-
-    return !deepEqual({ ...getValues() }, _defaultValues);
-  };
-
-  const _updateValid = async () => {
-    const isValid = formOptions.resolver
-      ? isEmptyObject((await executeResolver()).errors)
-      : await validateForm(_fields, true);
-
-    if (isValid !== _formState.isValid) {
-      _formState.isValid = isValid;
-      _subjects.state.next({
-        isValid,
-      });
-    }
-  };
-
-  const setValues = (
-    name: FieldPath<TFieldValues>,
-    value: UnpackNestedValue<PathValue<TFieldValues, FieldPath<TFieldValues>>>,
-    options: SetValueConfig,
-  ) =>
-    Object.entries(value).forEach(([fieldKey, fieldValue]) => {
-      const fieldName = `${name}.${fieldKey}` as Path<TFieldValues>;
-      const field = get(_fields, fieldName);
-      const isFieldArray = _names.array.has(name);
-
-      (isFieldArray || !isPrimitive(fieldValue) || (field && !field._f)) &&
-      !isDateObject(fieldValue)
-        ? setValues(
-            fieldName,
-            fieldValue as SetFieldValue<TFieldValues>,
-            options,
-          )
-        : setFieldValue(
-            fieldName,
-            fieldValue as SetFieldValue<TFieldValues>,
-            options,
-            true,
-          );
-    });
+  const _getDirty: GetIsDirty = (name, data) => (
+    name && data && set(_formValues, name, data),
+    !deepEqual(getValues(), _defaultValues)
+  );
 
   const _getWatch: WatchInternal<TFieldValues> = (
-    fieldNames,
+    names,
     defaultValue,
     isGlobal,
   ) => {
     const fieldValues = {
-      ...(_isMounted
+      ...(_stateFlags.mount
         ? _formValues
         : isUndefined(defaultValue)
         ? _defaultValues
-        : isString(fieldNames)
-        ? { [fieldNames]: defaultValue }
+        : isString(names)
+        ? { [names]: defaultValue }
         : defaultValue),
     };
 
-    if (!fieldNames) {
-      isGlobal && (_names.watchAll = true);
-      return fieldValues;
-    }
-
-    const result = [];
-
-    for (const fieldName of convertToArrayPayload(fieldNames)) {
-      isGlobal && _names.watch.add(fieldName as InternalFieldName);
-      result.push(get(fieldValues, fieldName as InternalFieldName));
-    }
-
-    return Array.isArray(fieldNames) ? result : result[0];
+    return generateWatchOutput(names, _names, fieldValues, isGlobal);
   };
 
-  const _updateValues: UpdateValues<TFieldValues> = (
-    defaultValues,
-    name = '',
-  ): void => {
-    for (const key in defaultValues) {
-      const value = defaultValues[key];
-      const fieldName = name + (name ? '.' : '') + key;
-      const field = get(_fields, fieldName);
+  const _getFieldArray = <TFieldArrayValues>(
+    name: InternalFieldName,
+  ): Partial<TFieldArrayValues>[] =>
+    compact(
+      get(
+        _stateFlags.mount ? _formValues : _defaultValues,
+        name,
+        props.shouldUnregister ? get(_defaultValues, name, []) : [],
+      ),
+    );
 
-      if (!field || !field._f) {
-        if (
-          (isObject(value) && Object.keys(value).length) ||
-          (Array.isArray(value) && value.length)
-        ) {
-          _updateValues(value, fieldName);
-        } else if (!field) {
-          set(_formValues, fieldName, value);
+  const setFieldValue = (
+    name: InternalFieldName,
+    value: SetFieldValue<TFieldValues>,
+    options: SetValueConfig = {},
+  ) => {
+    const field: Field = get(_fields, name);
+    let fieldValue: unknown = value;
+
+    if (field) {
+      const fieldReference = field._f;
+
+      if (fieldReference) {
+        !fieldReference.disabled &&
+          set(_formValues, name, getFieldValueAs(value, fieldReference));
+
+        fieldValue =
+          isWeb && isHTMLElement(fieldReference.ref) && isNullOrUndefined(value)
+            ? ''
+            : value;
+
+        if (isMultipleSelect(fieldReference.ref)) {
+          [...fieldReference.ref.options].forEach(
+            (selectRef) =>
+              (selectRef.selected = (
+                fieldValue as InternalFieldName[]
+              ).includes(selectRef.value)),
+          );
+        } else if (fieldReference.refs) {
+          if (isCheckBoxInput(fieldReference.ref)) {
+            fieldReference.refs.length > 1
+              ? fieldReference.refs.forEach(
+                  (checkboxRef) =>
+                    (checkboxRef.checked = Array.isArray(fieldValue)
+                      ? !!(fieldValue as []).find(
+                          (data: string) => data === checkboxRef.value,
+                        )
+                      : fieldValue === checkboxRef.value),
+                )
+              : fieldReference.refs[0] &&
+                (fieldReference.refs[0].checked = !!fieldValue);
+          } else {
+            fieldReference.refs.forEach(
+              (radioRef: HTMLInputElement) =>
+                (radioRef.checked = radioRef.value === fieldValue),
+            );
+          }
+        } else if (isFileInput(fieldReference.ref)) {
+          fieldReference.ref.value = '';
+        } else {
+          fieldReference.ref.value = fieldValue;
+
+          if (!fieldReference.ref.type) {
+            _subjects.watch.next({
+              name,
+            });
+          }
         }
       }
     }
-  };
 
-  const _updateFieldArray: BatchFieldArrayUpdate = (
-    keyName,
-    name,
-    method,
-    args,
-    updatedFieldArrayValuesWithKey = [],
-    shouldSet = true,
-    shouldSetFields = true,
-  ) => {
-    let output;
-    const updatedFieldArrayValues = omitKeys(
-      updatedFieldArrayValuesWithKey,
-      keyName,
-    );
-    _isInAction = true;
-
-    if (shouldSetFields && get(_fields, name)) {
-      output = method(get(_fields, name), args.argA, args.argB);
-      shouldSet && set(_fields, name, output);
-    }
-
-    output = method(get(_formValues, name), args.argA, args.argB);
-    shouldSet && set(_formValues, name, output);
-
-    if (Array.isArray(get(_formState.errors, name))) {
-      const output = method(get(_formState.errors, name), args.argA, args.argB);
-      shouldSet && set(_formState.errors, name, output);
-      unsetEmptyArray(_formState.errors, name);
-    }
-
-    if (_proxyFormState.touchedFields && get(_formState.touchedFields, name)) {
-      const output = method(
-        get(_formState.touchedFields, name),
-        args.argA,
-        args.argB,
-      );
-      shouldSet && set(_formState.touchedFields, name, output);
-      unsetEmptyArray(_formState.touchedFields, name);
-    }
-
-    if (_proxyFormState.dirtyFields || _proxyFormState.isDirty) {
-      set(
-        _formState.dirtyFields,
+    (options.shouldDirty || options.shouldTouch) &&
+      updateTouchAndDirty(
         name,
-        setFieldArrayDirtyFields(
-          omitKey(updatedFieldArrayValues, keyName),
-          get(_defaultValues, name, []),
-          get(_formState.dirtyFields, name, []),
-        ),
+        fieldValue,
+        options.shouldTouch,
+        options.shouldDirty,
+        true,
       );
-      updatedFieldArrayValues &&
-        set(
-          _formState.dirtyFields,
-          name,
-          setFieldArrayDirtyFields(
-            omitKey(updatedFieldArrayValues, keyName),
-            get(_defaultValues, name, []),
-            get(_formState.dirtyFields, name, []),
-          ),
-        );
-      unsetEmptyArray(_formState.dirtyFields, name);
-    }
 
-    _subjects.state.next({
-      isDirty: _getIsDirty(name, omitKey(updatedFieldArrayValues, keyName)),
-      dirtyFields: _formState.dirtyFields,
-      errors: _formState.errors,
-      isValid: _formState.isValid,
-    });
+    options.shouldValidate && trigger(name as Path<TFieldValues>);
   };
 
-  const _getFieldArrayValue = (name: InternalFieldName) =>
-    get(_isMounted ? _formValues : _defaultValues, name, []);
+  const setValues = <
+    T extends InternalFieldName,
+    K extends SetFieldValue<TFieldValues>,
+    U,
+  >(
+    name: T,
+    value: K,
+    options: U,
+  ) => {
+    for (const fieldKey in value) {
+      const fieldValue = value[fieldKey];
+      const fieldName = `${name}.${fieldKey}` as Path<TFieldValues>;
+      const field = get(_fields, fieldName);
+
+      (_names.array.has(name) ||
+        !isPrimitive(fieldValue) ||
+        (field && !field._f)) &&
+      !isDateObject(fieldValue)
+        ? setValues(fieldName, fieldValue, options)
+        : setFieldValue(fieldName, fieldValue, options);
+    }
+  };
 
   const setValue: UseFormSetValue<TFieldValues> = (
     name,
@@ -739,8 +615,9 @@ export function createFormControl<
   ) => {
     const field = get(_fields, name);
     const isFieldArray = _names.array.has(name);
+    const cloneValue = cloneObject(value);
 
-    set(_formValues, name, value);
+    set(_formValues, name, cloneValue);
 
     if (isFieldArray) {
       _subjects.array.next({
@@ -752,84 +629,180 @@ export function createFormControl<
         (_proxyFormState.isDirty || _proxyFormState.dirtyFields) &&
         options.shouldDirty
       ) {
-        set(
-          _formState.dirtyFields,
-          name,
-          setFieldArrayDirtyFields(
-            value,
-            get(_defaultValues, name, []),
-            get(_formState.dirtyFields, name, []),
-          ),
-        );
+        _formState.dirtyFields = getDirtyFields(_defaultValues, _formValues);
 
         _subjects.state.next({
           name,
           dirtyFields: _formState.dirtyFields,
-          isDirty: _getIsDirty(name, value),
+          isDirty: _getDirty(name, cloneValue),
         });
       }
     } else {
-      field && !field._f && !isNullOrUndefined(value)
-        ? setValues(name, value, options)
-        : setFieldValue(name, value, options, true);
+      field && !field._f && !isNullOrUndefined(cloneValue)
+        ? setValues(name, cloneValue, options)
+        : setFieldValue(name, cloneValue, options);
     }
 
-    isFieldWatched(name) && _subjects.state.next({});
+    isWatched(name, _names) && _subjects.state.next({});
     _subjects.watch.next({
       name,
     });
   };
 
+  const onChange: ChangeHandler = async (event) => {
+    const target = event.target;
+    let name = target.name;
+    const field: Field = get(_fields, name);
+
+    if (field) {
+      let error;
+      let isValid;
+      const fieldValue = target.type
+        ? getFieldValue(field._f)
+        : getEventValue(event);
+      const isBlurEvent =
+        event.type === EVENTS.BLUR || event.type === EVENTS.FOCUS_OUT;
+      const shouldSkipValidation =
+        (!hasValidation(field._f) &&
+          !_options.resolver &&
+          !get(_formState.errors, name) &&
+          !field._f.deps) ||
+        skipValidation(
+          isBlurEvent,
+          get(_formState.touchedFields, name),
+          _formState.isSubmitted,
+          validationModeAfterSubmit,
+          validationModeBeforeSubmit,
+        );
+      const watched = isWatched(name, _names, isBlurEvent);
+
+      set(_formValues, name, fieldValue);
+
+      if (isBlurEvent) {
+        field._f.onBlur && field._f.onBlur(event);
+      } else if (field._f.onChange) {
+        field._f.onChange(event);
+      }
+
+      const fieldState = updateTouchAndDirty(
+        name,
+        fieldValue,
+        isBlurEvent,
+        false,
+      );
+
+      const shouldRender = !isEmptyObject(fieldState) || watched;
+
+      !isBlurEvent &&
+        _subjects.watch.next({
+          name,
+          type: event.type,
+        });
+
+      if (shouldSkipValidation) {
+        return (
+          shouldRender &&
+          _subjects.state.next({ name, ...(watched ? {} : fieldState) })
+        );
+      }
+
+      !isBlurEvent && watched && _subjects.state.next({});
+
+      validateFields[name] = validateFields[name] ? +1 : 1;
+
+      _subjects.state.next({
+        isValidating: true,
+      });
+
+      if (_options.resolver) {
+        const { errors } = await _executeSchema([name]);
+        const previousErrorLookupResult = schemaErrorLookup(
+          _formState.errors,
+          _fields,
+          name,
+        );
+        const errorLookupResult = schemaErrorLookup(
+          errors,
+          _fields,
+          previousErrorLookupResult.name || name,
+        );
+
+        error = errorLookupResult.error;
+        name = errorLookupResult.name;
+
+        isValid = isEmptyObject(errors);
+      } else {
+        error = (
+          await validateField(
+            field,
+            get(_formValues, name),
+            shouldDisplayAllAssociatedErrors,
+            _options.shouldUseNativeValidation,
+          )
+        )[name];
+
+        isValid = await _updateValid(true);
+      }
+
+      field._f.deps && trigger(field._f.deps as FieldPath<TFieldValues>[]);
+
+      shouldRenderByError(false, name, isValid, error, fieldState);
+    }
+  };
+
   const trigger: UseFormTrigger<TFieldValues> = async (name, options = {}) => {
-    const fieldNames = convertToArrayPayload(name) as InternalFieldName[];
     let isValid;
+    let validationResult;
+    const fieldNames = convertToArrayPayload(name) as InternalFieldName[];
 
     _subjects.state.next({
       isValidating: true,
     });
 
-    if (formOptions.resolver) {
-      const schemaResult = await executeResolverValidation(
+    if (_options.resolver) {
+      const errors = await executeSchemaAndUpdateState(
         isUndefined(name) ? name : fieldNames,
       );
-      isValid = name
-        ? fieldNames.every((name) => !get(schemaResult, name))
-        : isEmptyObject(schemaResult);
+
+      isValid = isEmptyObject(errors);
+      validationResult = name
+        ? !fieldNames.some((name) => get(errors, name))
+        : isValid;
+    } else if (name) {
+      validationResult = (
+        await Promise.all(
+          fieldNames.map(async (fieldName) => {
+            const field = get(_fields, fieldName);
+            return await executeBuildInValidation(
+              field && field._f ? { [fieldName]: field } : field,
+            );
+          }),
+        )
+      ).every(Boolean);
+      !(!validationResult && !_formState.isValid) && _updateValid();
     } else {
-      if (name) {
-        isValid = (
-          await Promise.all(
-            fieldNames.map(async (fieldName) => {
-              const field = get(_fields, fieldName);
-              return await validateForm(
-                field._f ? { [fieldName]: field } : field,
-              );
-            }),
-          )
-        ).every(Boolean);
-      } else {
-        await validateForm(_fields);
-        isValid = isEmptyObject(_formState.errors);
-      }
+      validationResult = isValid = await executeBuildInValidation(_fields);
     }
 
     _subjects.state.next({
-      ...(isString(name) ? { name } : {}),
+      ...(!isString(name) ||
+      (_proxyFormState.isValid && isValid !== _formState.isValid)
+        ? {}
+        : { name }),
+      ...(_options.resolver ? { isValid } : {}),
       errors: _formState.errors,
       isValidating: false,
     });
 
-    if (options.shouldFocus && !isValid) {
+    options.shouldFocus &&
+      !validationResult &&
       focusFieldBy(
         _fields,
         (key) => get(_formState.errors, key),
         name ? fieldNames : _names.mount,
       );
-    }
 
-    _proxyFormState.isValid && _updateValid();
-
-    return isValid;
+    return validationResult;
   };
 
   const getValues: UseFormGetValues<TFieldValues> = (
@@ -839,7 +812,7 @@ export function createFormControl<
   ) => {
     const values = {
       ..._defaultValues,
-      ..._formValues,
+      ...(_stateFlags.mount ? _formValues : {}),
     };
 
     return isUndefined(fieldNames)
@@ -849,12 +822,22 @@ export function createFormControl<
       : fieldNames.map((name) => get(values, name as InternalFieldName));
   };
 
+  const getFieldState: UseFormGetFieldState<TFieldValues> = (
+    name,
+    formState,
+  ) => ({
+    invalid: !!get((formState || _formState).errors, name),
+    isDirty: !!get((formState || _formState).dirtyFields, name),
+    isTouched: !!get((formState || _formState).touchedFields, name),
+    error: get((formState || _formState).errors, name),
+  });
+
   const clearErrors: UseFormClearErrors<TFieldValues> = (name) => {
     name
       ? convertToArrayPayload(name).forEach((inputName) =>
           unset(_formState.errors, inputName),
         )
-      : (_formState.errors = {});
+      : (_formState.errors = {} as FieldErrors<TFieldValues>);
 
     _subjects.state.next({
       errors: _formState.errors,
@@ -879,46 +862,50 @@ export function createFormControl<
   };
 
   const watch: UseFormWatch<TFieldValues> = (
-    fieldName?:
+    name?:
       | FieldPath<TFieldValues>
       | ReadonlyArray<FieldPath<TFieldValues>>
       | WatchObserver<TFieldValues>,
     defaultValue?: unknown,
   ) =>
-    isFunction(fieldName)
+    isFunction(name)
       ? _subjects.watch.subscribe({
-          next: (info: any) =>
-            fieldName(
+          next: (info) =>
+            name(
               _getWatch(
                 undefined,
                 defaultValue as UnpackNestedValue<DeepPartial<TFieldValues>>,
-              ) as UnpackNestedValue<TFieldValues>,
-              info,
+              ),
+              info as {
+                name?: FieldPath<TFieldValues>;
+                type?: EventType;
+                value?: unknown;
+              },
             ),
         })
       : _getWatch(
-          fieldName as InternalFieldName | InternalFieldName[],
+          name as InternalFieldName | InternalFieldName[],
           defaultValue as UnpackNestedValue<DeepPartial<TFieldValues>>,
           true,
         );
 
   const unregister: UseFormUnregister<TFieldValues> = (name, options = {}) => {
-    for (const inputName of name ? convertToArrayPayload(name) : _names.mount) {
-      _names.mount.delete(inputName);
-      _names.array.delete(inputName);
+    for (const fieldName of name ? convertToArrayPayload(name) : _names.mount) {
+      _names.mount.delete(fieldName);
+      _names.array.delete(fieldName);
 
-      if (get(_fields, inputName) as Field) {
+      if (get(_fields, fieldName)) {
         if (!options.keepValue) {
-          unset(_fields, inputName);
-          unset(_formValues, inputName);
+          unset(_fields, fieldName);
+          unset(_formValues, fieldName);
         }
 
-        !options.keepError && unset(_formState.errors, inputName);
-        !options.keepDirty && unset(_formState.dirtyFields, inputName);
-        !options.keepTouched && unset(_formState.touchedFields, inputName);
-        !formOptions.shouldUnregister &&
+        !options.keepError && unset(_formState.errors, fieldName);
+        !options.keepDirty && unset(_formState.dirtyFields, fieldName);
+        !options.keepTouched && unset(_formState.touchedFields, fieldName);
+        !_options.shouldUnregister &&
           !options.keepDefaultValue &&
-          unset(_defaultValues, inputName);
+          unset(_defaultValues, fieldName);
       }
     }
 
@@ -926,60 +913,15 @@ export function createFormControl<
 
     _subjects.state.next({
       ..._formState,
-      ...(!options.keepDirty ? {} : { isDirty: _getIsDirty() }),
+      ...(!options.keepDirty ? {} : { isDirty: _getDirty() }),
     });
+
     !options.keepIsValid && _updateValid();
   };
 
-  const registerFieldRef = (
-    name: InternalFieldName,
-    fieldRef: HTMLInputElement,
-    options?: RegisterOptions,
-  ): ((name: InternalFieldName) => void) | void => {
-    register(name as FieldPath<TFieldValues>, options);
-    let field: Field = get(_fields, name);
-    const ref = isUndefined(fieldRef.value)
-      ? fieldRef.querySelectorAll
-        ? (fieldRef.querySelectorAll('input,select,textarea')[0] as Ref) ||
-          fieldRef
-        : fieldRef
-      : fieldRef;
-
-    const isRadioOrCheckbox = isRadioOrCheckboxFunction(ref);
-
-    if (
-      ref === field._f.ref ||
-      (isRadioOrCheckbox &&
-        compact(field._f.refs || []).find((option) => option === ref))
-    ) {
-      return;
-    }
-
-    field = {
-      _f: isRadioOrCheckbox
-        ? {
-            ...field._f,
-            refs: [
-              ...compact(field._f.refs || []).filter(
-                (ref) => isHTMLElement(ref) && document.contains(ref),
-              ),
-              ref,
-            ],
-            ref: { type: ref.type, name },
-          }
-        : {
-            ...field._f,
-            ref,
-          },
-    };
-
-    set(_fields, name, field);
-
-    _updateValidAndInputValue(name, ref);
-  };
-
   const register: UseFormRegister<TFieldValues> = (name, options = {}) => {
-    const field = get(_fields, name);
+    let field = get(_fields, name);
+    const disabledIsDefined = isBoolean(options.disabled);
 
     set(_fields, name, {
       _f: {
@@ -989,50 +931,81 @@ export function createFormControl<
         ...options,
       },
     });
-
-    if (options.value) {
-      set(_formValues, name, options.value);
-    }
-
-    if (
-      !isUndefined(options.disabled) &&
-      field &&
-      field._f &&
-      field._f.ref.disabled !== options.disabled
-    ) {
-      set(_formValues, name, options.disabled ? undefined : field._f.ref.value);
-    }
-
     _names.mount.add(name);
-    !field && _updateValidAndInputValue(name, undefined, true);
 
-    return isWindowUndefined
-      ? ({ name: name as InternalFieldName } as UseFormRegisterReturn)
-      : {
+    field
+      ? disabledIsDefined &&
+        set(
+          _formValues,
           name,
-          ...(isUndefined(options.disabled)
-            ? {}
-            : { disabled: options.disabled }),
-          onChange: handleChange,
-          onBlur: handleChange,
-          ref: (ref: HTMLInputElement | null): void => {
-            if (ref) {
-              registerFieldRef(name, ref, options);
-            } else {
-              const field = get(_fields, name, {}) as Field;
-              const _shouldUnregister =
-                formOptions.shouldUnregister || options.shouldUnregister;
+          options.disabled
+            ? undefined
+            : get(_formValues, name, getFieldValue(field._f)),
+        )
+      : updateValidAndValue(name, true, options.value);
 
-              if (field._f) {
-                field._f.mount = false;
-              }
+    return {
+      ...(disabledIsDefined ? { disabled: options.disabled } : {}),
+      ...(_options.shouldUseNativeValidation
+        ? {
+            required: !!options.required,
+            min: getRuleValue(options.min),
+            max: getRuleValue(options.max),
+            minLength: getRuleValue<number>(options.minLength) as number,
+            maxLength: getRuleValue(options.maxLength) as number,
+            pattern: getRuleValue(options.pattern) as string,
+          }
+        : {}),
+      name,
+      onChange,
+      onBlur: onChange,
+      ref: (ref: HTMLInputElement | null): void => {
+        if (ref) {
+          register(name, options);
+          field = get(_fields, name);
 
-              _shouldUnregister &&
-                !(isNameInFieldArray(_names.array, name) && _isInAction) &&
-                _names.unMount.add(name);
-            }
-          },
-        };
+          const fieldRef = isUndefined(ref.value)
+            ? ref.querySelectorAll
+              ? (ref.querySelectorAll('input,select,textarea')[0] as Ref) || ref
+              : ref
+            : ref;
+          const radioOrCheckbox = isRadioOrCheckbox(fieldRef);
+          const refs = field._f.refs || [];
+
+          if (
+            radioOrCheckbox
+              ? refs.find((option: Ref) => option === fieldRef)
+              : fieldRef === field._f.ref
+          ) {
+            return;
+          }
+
+          set(_fields, name, {
+            _f: {
+              ...field._f,
+              ...(radioOrCheckbox
+                ? {
+                    refs: refs.concat(fieldRef).filter(live),
+                    ref: { type: fieldRef.type, name },
+                  }
+                : { ref: fieldRef }),
+            },
+          });
+
+          updateValidAndValue(name, false, undefined, fieldRef);
+        } else {
+          field = get(_fields, name, {});
+
+          if (field._f) {
+            field._f.mount = false;
+          }
+
+          (_options.shouldUnregister || options.shouldUnregister) &&
+            !(isNameInFieldArray(_names.array, name) && _stateFlags.action) &&
+            _names.unMount.add(name);
+        }
+      },
+    };
   };
 
   const handleSubmit: UseFormHandleSubmit<TFieldValues> =
@@ -1042,19 +1015,19 @@ export function createFormControl<
         e.persist && e.persist();
       }
       let hasNoPromiseError = true;
-      let fieldValues: any = { ..._formValues };
+      let fieldValues: any = cloneObject(_formValues);
 
       _subjects.state.next({
         isSubmitting: true,
       });
 
       try {
-        if (formOptions.resolver) {
-          const { errors, values } = await executeResolver();
-          _formState.errors = errors;
+        if (_options.resolver) {
+          const { errors, values } = await _executeSchema();
+          _formState.errors = errors as FieldErrors<TFieldValues>;
           fieldValues = values;
         } else {
-          await validateForm(_fields);
+          await executeBuildInValidation(_fields);
         }
 
         if (
@@ -1062,13 +1035,16 @@ export function createFormControl<
           Object.keys(_formState.errors).every((name) => get(fieldValues, name))
         ) {
           _subjects.state.next({
-            errors: {},
+            errors: {} as FieldErrors<TFieldValues>,
             isSubmitting: true,
           });
           await onValid(fieldValues, e);
         } else {
-          onInvalid && (await onInvalid(_formState.errors, e));
-          formOptions.shouldFocusError &&
+          if (onInvalid) {
+            await onInvalid({ ..._formState.errors }, e);
+          }
+
+          _options.shouldFocusError &&
             focusFieldBy(
               _fields,
               (key) => get(_formState.errors, key),
@@ -1091,35 +1067,72 @@ export function createFormControl<
       }
     };
 
+  const resetField: UseFormResetField<TFieldValues> = (name, options = {}) => {
+    if (get(_fields, name)) {
+      if (isUndefined(options.defaultValue)) {
+        setValue(name, get(_defaultValues, name));
+      } else {
+        setValue(name, options.defaultValue);
+        set(_defaultValues, name, options.defaultValue);
+      }
+
+      if (!options.keepTouched) {
+        unset(_formState.touchedFields, name);
+      }
+
+      if (!options.keepDirty) {
+        unset(_formState.dirtyFields, name);
+        _formState.isDirty = options.defaultValue
+          ? _getDirty(name, get(_defaultValues, name))
+          : _getDirty();
+      }
+
+      if (!options.keepError) {
+        unset(_formState.errors, name);
+        _proxyFormState.isValid && _updateValid();
+      }
+
+      _subjects.state.next({ ..._formState });
+    }
+  };
+
   const reset: UseFormReset<TFieldValues> = (
     formValues,
     keepStateOptions = {},
   ) => {
     const updatedValues = formValues || _defaultValues;
-    const values = cloneObject(updatedValues);
+    // <<<<<<< HEAD
+    //     const values = cloneObject(updatedValues);
 
-    _formValues = values;
+    //     _formValues = values;
 
-    if (isWeb && !keepStateOptions.keepValues) {
-      for (const name of _names.mount) {
-        const field = get(_fields, name);
-        if (field && field._f) {
-          const inputRef = Array.isArray(field._f.refs)
-            ? field._f.refs[0]
-            : field._f.ref;
+    //     if (isWeb && !keepStateOptions.keepValues) {
+    //       for (const name of _names.mount) {
+    //         const field = get(_fields, name);
+    //         if (field && field._f) {
+    //           const inputRef = Array.isArray(field._f.refs)
+    //             ? field._f.refs[0]
+    //             : field._f.ref;
 
-          try {
-            if (isHTMLElement(inputRef)) {
-              inputRef.closest('form')!.reset();
-              break;
-            }
-          } catch {}
-        }
-      }
-    }
+    //           try {
+    //             if (isHTMLElement(inputRef)) {
+    //               inputRef.closest('form')!.reset();
+    //               break;
+    //             }
+    //           } catch {}
+    //         }
+    //       }
+    //     }
+    // =======
+    const cloneUpdatedValues = cloneObject(updatedValues);
+    const values =
+      formValues && !isEmptyObject(formValues)
+        ? cloneUpdatedValues
+        : _defaultValues;
+    // >>>>>>> v7.26.0
 
     if (!keepStateOptions.keepDefaultValues) {
-      _defaultValues = { ...updatedValues };
+      _defaultValues = updatedValues;
     }
 
     if (!keepStateOptions.keepValues) {
@@ -1130,15 +1143,36 @@ export function createFormControl<
         _fields = {};
       }
 
-      _subjects.control.next({
-        values: keepStateOptions.keepDefaultValues
-          ? _defaultValues
-          : { ...updatedValues },
-      });
+      if (isWeb && isUndefined(formValues)) {
+        for (const name of _names.mount) {
+          const field = get(_fields, name);
+          if (field && field._f) {
+            const fieldReference = Array.isArray(field._f.refs)
+              ? field._f.refs[0]
+              : field._f.ref;
 
-      _subjects.watch.next({});
+            try {
+              isHTMLElement(fieldReference) &&
+                fieldReference.closest('form')!.reset();
+              break;
+            } catch {}
+          }
+        }
+      }
+
+      _formValues = props.shouldUnregister
+        ? keepStateOptions.keepDefaultValues
+          ? cloneObject(_defaultValues)
+          : {}
+        : cloneUpdatedValues;
+
+      _fields = {};
 
       _subjects.array.next({
+        values,
+      });
+
+      _subjects.watch.next({
         values,
       });
     }
@@ -1152,6 +1186,11 @@ export function createFormControl<
       focus: '',
     };
 
+    _stateFlags.mount =
+      !_proxyFormState.isValid || !!keepStateOptions.keepIsValid;
+
+    _stateFlags.watch = !!props.shouldUnregister;
+
     _subjects.state.next({
       submitCount: keepStateOptions.keepSubmitCount
         ? _formState.submitCount
@@ -1162,70 +1201,66 @@ export function createFormControl<
       isDirty: keepStateOptions.keepDirty
         ? _formState.isDirty
         : keepStateOptions.keepDefaultValues
-        ? deepEqual(formValues, _defaultValues)
+        ? !deepEqual(formValues, _defaultValues)
         : false,
       isSubmitted: keepStateOptions.keepIsSubmitted
         ? _formState.isSubmitted
         : false,
-      dirtyFields: keepStateOptions.keepDirty ? _formState.dirtyFields : {},
+      dirtyFields: keepStateOptions.keepDirty
+        ? _formState.dirtyFields
+        : ((keepStateOptions.keepDefaultValues && formValues
+            ? Object.entries(formValues).reduce(
+                (previous, [key, value]) => ({
+                  ...previous,
+                  [key]: value !== get(_defaultValues, key),
+                }),
+                {},
+              )
+            : {}) as FieldNamesMarkedBoolean<TFieldValues>),
       touchedFields: keepStateOptions.keepTouched
         ? _formState.touchedFields
-        : {},
-      errors: keepStateOptions.keepErrors ? _formState.errors : {},
+        : ({} as FieldNamesMarkedBoolean<TFieldValues>),
+      errors: keepStateOptions.keepErrors
+        ? _formState.errors
+        : ({} as FieldErrors<TFieldValues>),
       isSubmitting: false,
       isSubmitSuccessful: false,
     });
-
-    _isMounted = !!keepStateOptions.keepIsValid;
   };
 
-  const setFocus: UseFormSetFocus<TFieldValues> = (name) =>
-    get(_fields, name)._f.ref.focus();
-
-  const _removeFields = () => {
-    for (const name of _names.unMount) {
-      const field = get(_fields, name) as Field;
-
-      field &&
-        (field._f.refs ? field._f.refs.every(live) : live(field._f.ref)) &&
-        unregister(name as FieldPath<TFieldValues>);
-    }
-
-    _names.unMount = new Set();
+  const setFocus: UseFormSetFocus<TFieldValues> = (name) => {
+    const field = get(_fields, name)._f;
+    (field.ref.focus ? field.ref : field.refs[0]).focus();
   };
 
   return {
     control: {
       register,
       unregister,
+      getFieldState,
+      _executeSchema,
       _getWatch,
-      _getIsDirty,
+      _getDirty,
       _updateValid,
-      _updateValues,
-      _removeFields,
+      _removeUnmounted,
       _updateFieldArray,
-      _getFieldArrayValue,
+      _getFieldArray,
       _subjects,
-      _shouldUnregister: formOptions.shouldUnregister,
-      _fields,
       _proxyFormState,
+      get _fields() {
+        return _fields;
+      },
       get _formValues() {
         return _formValues;
       },
-      set _formValues(value) {
-        _formValues = value;
+      get _stateFlags() {
+        return _stateFlags;
       },
-      get _isMounted() {
-        return _isMounted;
-      },
-      set _isMounted(value) {
-        _isMounted = value;
+      set _stateFlags(value) {
+        _stateFlags = value;
       },
       get _defaultValues() {
         return _defaultValues;
-      },
-      set _defaultValues(value) {
-        _defaultValues = value;
       },
       get _names() {
         return _names;
@@ -1233,24 +1268,20 @@ export function createFormControl<
       set _names(value) {
         _names = value;
       },
-      _isInAction: {
-        get val() {
-          return _isInAction;
-        },
-        set val(value) {
-          _isInAction = value;
-        },
+      get _formState() {
+        return _formState;
       },
-      _formState: {
-        get val() {
-          return _formState;
-        },
-        set val(value) {
-          _formState = value;
-        },
+      set _formState(value) {
+        _formState = value;
       },
-      _updateProps: (options) => {
-        formOptions = { ...defaultOptions, ...options };
+      get _options() {
+        return _options;
+      },
+      set _options(value) {
+        _options = {
+          ..._options,
+          ...value,
+        };
       },
     },
     trigger,
@@ -1260,9 +1291,11 @@ export function createFormControl<
     setValue,
     getValues,
     reset,
+    resetField,
     clearErrors,
     unregister,
     setError,
     setFocus,
+    getFieldState,
   };
 }

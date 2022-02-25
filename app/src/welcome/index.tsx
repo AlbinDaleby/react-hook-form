@@ -99,7 +99,7 @@ const items: Item[] = [
   {
     title: 'Reset',
     description: 'Should be able to re-populate the form while reset',
-    slugs: ['/rest'],
+    slugs: ['/reset'],
   },
   {
     title: 'ReValidateMode',
@@ -121,7 +121,7 @@ const items: Item[] = [
   {
     title: 'SetValue',
     description: 'Should set input value',
-    slugs: ['/setValue'],
+    slugs: ['/setValue', '/setValueAsyncStrictMode'],
   },
   {
     title: 'SetValueCustomRegister',
@@ -223,8 +223,8 @@ const Component: React.FC = () => {
             <div style={S.title}>{title}</div>
             <div style={S.description}>{description}</div>
             <div>
-              {slugs.map((slug) => (
-                <Link to={slug} style={S.slug}>
+              {slugs.map((slug, index) => (
+                <Link key={index + slug} to={slug} style={S.slug}>
                   {slug}
                 </Link>
               ))}

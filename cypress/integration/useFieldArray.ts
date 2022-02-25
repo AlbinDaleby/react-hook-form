@@ -106,7 +106,24 @@ describe('useFieldArray', () => {
       }),
     );
 
-    cy.get('#renderCount').contains('41');
+    cy.get('#append').click();
+    cy.get('#append').click();
+    cy.get('#append').click();
+
+    cy.get('#removeAsync').click();
+    cy.get('#removeAsync').click();
+
+    cy.get('input').should('have.length', 1);
+
+    cy.get('#submit').click();
+
+    cy.get('#result').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        data: [{ name: '41' }],
+      }),
+    );
+
+    cy.get('#renderCount').contains('54');
   });
 
   it('should behaviour correctly with defaultValue', () => {
@@ -417,13 +434,33 @@ describe('useFieldArray', () => {
     cy.get('#renderCount').contains('37');
   });
 
+  it('should replace fields with new values', () => {
+    cy.get('#replace').click();
+    cy.get('ul > li').eq(0).find('input').should('have.value', '37. lorem');
+    cy.get('ul > li').eq(1).find('input').should('have.value', '37. ipsum');
+    cy.get('ul > li').eq(2).find('input').should('have.value', '37. dolor');
+    cy.get('ul > li').eq(3).find('input').should('have.value', '37. sit amet');
+
+    cy.get('#submit').click();
+    cy.get('#result').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        data: [
+          { name: '37. lorem' },
+          { name: '37. ipsum' },
+          { name: '37. dolor' },
+          { name: '37. sit amet' },
+        ],
+      }),
+    );
+  });
+
   it('should display the correct dirty value with default value', () => {
     cy.visit('http://localhost:3000/useFieldArray/default');
     cy.get('#dirty').contains('no');
     cy.get('#update').click();
     cy.get('#dirtyFields').should(($state) =>
       expect(JSON.parse($state.text())).to.be.deep.equal({
-        data: [{ name: true }],
+        data: [{ name: true }, { name: false }, { name: false }],
       }),
     );
     cy.get('#dirty').contains('yes');
@@ -435,7 +472,7 @@ describe('useFieldArray', () => {
     cy.get('#delete2').click();
     cy.get('#dirtyFields').should(($state) =>
       expect(JSON.parse($state.text())).to.be.deep.equal({
-        data: [{ name: true }, { name: true }, {}, { name: true }],
+        data: [{ name: true }, { name: true }, { name: false }, { name: true }],
       }),
     );
     cy.get('#delete2').click();
@@ -505,7 +542,7 @@ describe('useFieldArray', () => {
 
     cy.get('#delete0').click();
     cy.get('#dirtyFields').should(($state) =>
-      expect(JSON.parse($state.text())).to.be.deep.equal({}),
+      expect(JSON.parse($state.text())).to.be.deep.equal({ data: [] }),
     );
 
     cy.get('#dirty').contains('yes');

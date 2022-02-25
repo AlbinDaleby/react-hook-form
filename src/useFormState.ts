@@ -1,24 +1,53 @@
-import * as React from 'react';
+import React from 'react';
 
 import getProxyFormState from './logic/getProxyFormState';
 import shouldRenderFormState from './logic/shouldRenderFormState';
-import convertToArrayPayload from './utils/convertToArrayPayload';
+import shouldSubscribeByName from './logic/shouldSubscribeByName';
 import {
   FieldValues,
-  FormState,
   InternalFieldName,
   UseFormStateProps,
   UseFormStateReturn,
 } from './types';
 import { useFormContext } from './useFormContext';
+import { useSubscribe } from './useSubscribe';
 
+/**
+ * This custom hook allows you to subscribe to each form state, and isolate the re-render at the custom hook level. It has its scope in terms of form state subscription, so it would not affect other useFormState and useForm. Using this hook can reduce the re-render impact on large and complex form application.
+ *
+ * @remarks
+ * [API](https://react-hook-form.com/api/useformstate) • [Demo](https://codesandbox.io/s/useformstate-75xly)
+ *
+ * @param props - include options on specify fields to subscribe. {@link UseFormStateReturn}
+ *
+ * @example
+ * ```tsx
+ * function App() {
+ *   const { register, handleSubmit, control } = useForm({
+ *     defaultValues: {
+ *     firstName: "firstName"
+ *   }});
+ *   const { dirtyFields } = useFormState({
+ *     control
+ *   });
+ *   const onSubmit = (data) => console.log(data);
+ *
+ *   return (
+ *     <form onSubmit={handleSubmit(onSubmit)}>
+ *       <input {...register("firstName")} placeholder="First Name" />
+ *       {dirtyFields.firstName && <p>Field is dirty.</p>}
+ *       <input type="submit" />
+ *     </form>
+ *   );
+ * }
+ * ```
+ */
 function useFormState<TFieldValues extends FieldValues = FieldValues>(
   props?: UseFormStateProps<TFieldValues>,
 ): UseFormStateReturn<TFieldValues> {
-  const methods = useFormContext();
-  const { control = methods.control, disabled, name } = props || {};
-  const nameRef = React.useRef<InternalFieldName>(name as InternalFieldName);
-  const [formState, updateFormState] = React.useState(control._formState.val);
+  const methods = useFormContext<TFieldValues>();
+  const { control = methods.control, disabled, name, exact } = props || {};
+  const [formState, updateFormState] = React.useState(control._formState);
   const _localProxyFormState = React.useRef({
     isDirty: false,
     dirtyFields: false,
@@ -27,28 +56,42 @@ function useFormState<TFieldValues extends FieldValues = FieldValues>(
     isValid: false,
     errors: false,
   });
-  nameRef.current = name as InternalFieldName;
+  const _name = React.useRef(name);
+  const _mounted = React.useRef(true);
 
-  React.useEffect(() => {
-    const formStateSubscription = control._subjects.state.subscribe({
-      next: (formState) =>
-        (!nameRef.current ||
-          !formState.name ||
-          convertToArrayPayload(nameRef.current).includes(formState.name)) &&
-        shouldRenderFormState(formState, _localProxyFormState.current) &&
-        updateFormState({
-          ...control._formState.val,
-          ...formState,
-        }),
-    });
+  _name.current = name;
 
-    disabled && formStateSubscription.unsubscribe();
+  const callback = React.useCallback(
+    (value) =>
+      _mounted.current &&
+      shouldSubscribeByName(
+        _name.current as InternalFieldName,
+        value.name,
+        exact,
+      ) &&
+      shouldRenderFormState(value, _localProxyFormState.current) &&
+      updateFormState({
+        ...control._formState,
+        ...value,
+      }),
+    [control, exact],
+  );
 
-    return () => formStateSubscription.unsubscribe();
-  }, [disabled, control]);
+  useSubscribe({
+    disabled,
+    callback,
+    subject: control._subjects.state,
+  });
+
+  React.useEffect(
+    () => () => {
+      _mounted.current = false;
+    },
+    [],
+  );
 
   return getProxyFormState(
-    formState as FormState<TFieldValues>,
+    formState,
     control._proxyFormState,
     _localProxyFormState.current,
     false,

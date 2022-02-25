@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -9,11 +9,16 @@ import {
 import { act, renderHook } from '@testing-library/react-hooks';
 
 import { VALIDATION_MODE } from '../../constants';
+import * as generateId from '../../logic/generateId';
 import { Control } from '../../types';
 import { useController } from '../../useController';
 import { useFieldArray } from '../../useFieldArray';
 import { useForm } from '../../useForm';
-import { mockGenerateId } from '../useFieldArray.test';
+
+const mockGenerateId = () => {
+  let id = 0;
+  jest.spyOn(generateId, 'default').mockImplementation(() => (id++).toString());
+};
 
 describe('update', () => {
   beforeEach(() => {
@@ -65,7 +70,7 @@ describe('update', () => {
     await waitFor(() => screen.getByText('dirty'));
 
     expect(dirtyInputs).toEqual({
-      test: [{ value: true }],
+      test: [{ value: true }, { value: false }, { value: false }],
     });
   });
 
@@ -182,14 +187,14 @@ describe('update', () => {
     await waitFor(() =>
       expect(renderedItems).toEqual([
         undefined,
-        [{ value: 'test' }],
+        [],
         [{ value: 'test' }],
         [{ value: 'test' }],
       ]),
     );
   });
 
-  it('should update group input correctly', () => {
+  it('should update group input correctly', async () => {
     type FormValues = {
       test: {
         value: {
@@ -279,7 +284,9 @@ describe('update', () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button'));
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button'));
+    });
 
     expect(
       (screen.getAllByRole('textbox')[0] as HTMLInputElement).value,
@@ -452,7 +459,174 @@ describe('update', () => {
         result.current.update(0, { value: '1' });
       });
 
-      expect(resolver).not.toBeCalled();
+      expect(resolver).toBeCalled();
+    });
+  });
+
+  it('should not omit keyName when provided', async () => {
+    type FormValues = {
+      test: {
+        test: string;
+        id: string;
+      }[];
+    };
+
+    const App = () => {
+      const [data, setData] = React.useState<unknown>([]);
+      const { control, register, handleSubmit } = useForm<FormValues>({
+        defaultValues: {
+          test: [{ id: '1234', test: 'data' }],
+        },
+      });
+
+      const { fields, update } = useFieldArray({
+        control,
+        name: 'test',
+      });
+
+      return (
+        <form onSubmit={handleSubmit(setData)}>
+          {fields.map((field, index) => {
+            return <input key={field.id} {...register(`test.${index}.test`)} />;
+          })}
+          <button
+            type={'button'}
+            onClick={() => {
+              update(0, {
+                id: 'whatever',
+                test: '1234',
+              });
+            }}
+          >
+            update
+          </button>
+          <button>submit</button>
+          <p>{JSON.stringify(data)}</p>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'update' }));
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    });
+
+    screen.getByText('{"test":[{"id":"whatever","test":"1234"}]}');
+  });
+
+  it('should not omit keyName when provided and defaultValue is empty', async () => {
+    type FormValues = {
+      test: {
+        test: string;
+        id: string;
+      }[];
+    };
+
+    const App = () => {
+      const [data, setData] = React.useState<unknown>([]);
+      const { control, register, handleSubmit } = useForm<FormValues>();
+
+      const { fields, update } = useFieldArray({
+        control,
+        name: 'test',
+      });
+
+      return (
+        <form onSubmit={handleSubmit(setData)}>
+          {fields.map((field, index) => {
+            return <input key={field.id} {...register(`test.${index}.test`)} />;
+          })}
+          <button
+            type={'button'}
+            onClick={() => {
+              update(0, {
+                id: 'whatever',
+                test: '1234',
+              });
+            }}
+          >
+            update
+          </button>
+          <button>submit</button>
+          <p>{JSON.stringify(data)}</p>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'update' }));
+
+    await actComponent(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    });
+
+    screen.getByText('{"test":[{"id":"whatever","test":"1234"}]}');
+  });
+
+  it('should not update errors state', async () => {
+    const App = () => {
+      const {
+        control,
+        register,
+        trigger,
+        formState: { errors },
+      } = useForm({
+        defaultValues: {
+          test: [
+            {
+              firstName: '',
+            },
+          ],
+        },
+      });
+      const { fields, update } = useFieldArray({
+        name: 'test',
+        control,
+      });
+
+      React.useEffect(() => {
+        trigger();
+      }, [trigger]);
+
+      return (
+        <form>
+          {fields.map((field, i) => (
+            <input
+              key={field.id}
+              {...register(`test.${i}.firstName` as const, {
+                required: 'This is required',
+              })}
+            />
+          ))}
+          <p>{errors.test?.[0].firstName?.message}</p>
+          <button
+            type={'button'}
+            onClick={() =>
+              update(0, {
+                firstName: 'firstName',
+              })
+            }
+          >
+            update
+          </button>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    await waitFor(async () => {
+      screen.getByText('This is required');
+    });
+
+    fireEvent.click(screen.getByRole('button'));
+
+    await waitFor(async () => {
+      screen.getByText('This is required');
     });
   });
 });

@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import { Button, Text, TextInput, View } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
@@ -7,7 +7,7 @@ import { Controller } from './controller';
 import { useForm } from './useForm';
 
 describe('Controller with React Native', () => {
-  jest.setTimeout(12000);
+  jest.setTimeout(20000);
 
   it('should not occur error when invoked reset', async () => {
     const mockFocus = jest.spyOn(focusOnErrorField, 'default');
@@ -62,7 +62,7 @@ describe('Controller with React Native', () => {
 
     fireEvent.press(getByText('reset'));
 
-    expect(input.props.value).toBeUndefined();
+    expect(input.props.value).toEqual('');
     expect(queryByText('required')).toBeNull();
   });
 });

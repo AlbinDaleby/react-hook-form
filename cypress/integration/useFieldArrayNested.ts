@@ -34,6 +34,8 @@ describe('useFieldArrayNested', () => {
       expect(JSON.parse($state.text())).to.be.deep.equal({
         test: [
           {
+            firstName: false,
+            lastName: false,
             keyValue: [
               { name: true },
               { name: true },
@@ -53,8 +55,21 @@ describe('useFieldArrayNested', () => {
 
     cy.get('#submit').click();
 
-    cy.get('#result').contains(
-      '{"test":[{"firstName":"Bill","keyValue":[{"name":"insert"},{"name":"1a"},{"name":"1c"},{"name":"append"}],"lastName":"Luo"}]}',
+    cy.get('#result').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        test: [
+          {
+            firstName: 'Bill',
+            lastName: 'Luo',
+            keyValue: [
+              { name: 'insert' },
+              { name: '1a' },
+              { name: '1c' },
+              { name: 'append' },
+            ],
+          },
+        ],
+      }),
     );
 
     cy.get('#prepend').click();
@@ -63,12 +78,7 @@ describe('useFieldArrayNested', () => {
       expect(JSON.parse($state.text())).to.be.deep.equal({
         test: [
           {
-            keyValue: [
-              { name: true },
-              { name: true },
-              { name: true },
-              { name: true },
-            ],
+            keyValue: [{ name: true }, { name: true }],
             firstName: true,
             lastName: true,
           },
@@ -115,29 +125,11 @@ describe('useFieldArrayNested', () => {
         test: [
           {
             firstName: true,
-            lastName: true,
             keyValue: [{ name: true }, { name: true }],
-          },
-          {
-            firstName: true,
             lastName: true,
-            keyValue: [
-              { name: true },
-              { name: true },
-              { name: true },
-              { name: true },
-            ],
           },
-          {
-            firstName: true,
-            lastName: true,
-            keyValue: [
-              { name: true },
-              { name: true },
-              { name: true },
-              { name: true },
-            ],
-          },
+          { firstName: true },
+          { firstName: true, keyValue: [] },
           {
             firstName: true,
             lastName: true,
@@ -154,8 +146,24 @@ describe('useFieldArrayNested', () => {
 
     cy.get('#submit').click();
 
-    cy.get('#result').contains(
-      '{"test":[{"firstName":"prepend","keyValue":[]},{"firstName":"insert","keyValue":[]},{"firstName":"append","keyValue":[]},{"firstName":"Bill","keyValue":[{"name":"insert"},{"name":"1a"},{"name":"1c"},{"name":"append"}],"lastName":"Luo"}]}',
+    cy.get('#result').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        test: [
+          { firstName: 'prepend', keyValue: [] },
+          { firstName: 'insert', keyValue: [] },
+          { firstName: 'append', keyValue: [] },
+          {
+            firstName: 'Bill',
+            keyValue: [
+              { name: 'insert' },
+              { name: '1a' },
+              { name: '1c' },
+              { name: 'append' },
+            ],
+            lastName: 'Luo',
+          },
+        ],
+      }),
     );
 
     cy.get(`#nest-append-0`).click();
@@ -183,29 +191,11 @@ describe('useFieldArrayNested', () => {
         test: [
           {
             firstName: true,
-            lastName: true,
             keyValue: [{ name: true }, { name: true }, { name: true }],
-          },
-          {
-            firstName: true,
             lastName: true,
-            keyValue: [
-              { name: true },
-              { name: true },
-              { name: true },
-              { name: true },
-            ],
           },
-          {
-            firstName: true,
-            lastName: true,
-            keyValue: [
-              { name: true },
-              { name: true },
-              { name: true },
-              { name: true },
-            ],
-          },
+          { firstName: true, keyValue: [] },
+          { firstName: true, keyValue: [] },
           {
             firstName: true,
             lastName: true,
@@ -223,8 +213,27 @@ describe('useFieldArrayNested', () => {
     );
 
     cy.get('#submit').click();
-    cy.get('#result').contains(
-      '{"test":[{"firstName":"prepend","keyValue":[{"name":"update"},{"name":"prepend"},{"name":"append"}]},{"firstName":"insert","keyValue":[]},{"firstName":"append","keyValue":[]},{"firstName":"Bill","keyValue":[{"name":"insert"},{"name":"append"}],"lastName":"Luo"}]}',
+
+    cy.get('#result').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        test: [
+          {
+            firstName: 'prepend',
+            keyValue: [
+              { name: 'update' },
+              { name: 'prepend' },
+              { name: 'append' },
+            ],
+          },
+          { firstName: 'insert', keyValue: [] },
+          { firstName: 'append', keyValue: [] },
+          {
+            firstName: 'Bill',
+            keyValue: [{ name: 'insert' }, { name: 'append' }],
+            lastName: 'Luo',
+          },
+        ],
+      }),
     );
 
     cy.get('#nest-remove-all-3').click();
@@ -233,24 +242,51 @@ describe('useFieldArrayNested', () => {
     cy.get('#nest-remove-all-0').click();
 
     cy.get('#touched-nested-2').contains(
-      '{"test":[{"firstName":true},{"firstName":true},{"firstName":true},null]}',
+      '{"test":[{"firstName":true,"keyValue":[]},{"firstName":true},{"firstName":true},{"keyValue":[]}]}',
     );
 
-    cy.get('#dirty-nested-2').contains(
-      '{"test":[{"keyValue":[{"name":true},{"name":true}],"firstName":true,"lastName":true},{"firstName":true,"lastName":true},{"firstName":true,"lastName":true},{"firstName":true,"lastName":true}]}',
+    cy.get('#dirty-nested-2').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        test: [
+          {
+            firstName: true,
+            keyValue: [{ name: true }, { name: true }],
+            lastName: true,
+          },
+          { firstName: true, keyValue: [] },
+          { firstName: true, keyValue: [] },
+          { firstName: true, lastName: true, keyValue: [] },
+        ],
+      }),
     );
 
     cy.get('#submit').click();
-    cy.get('#result').contains(
-      '{"test":[{"firstName":"prepend","keyValue":[]},{"firstName":"insert","keyValue":[]},{"firstName":"append","keyValue":[]},{"firstName":"Bill","keyValue":[],"lastName":"Luo"}]}',
+
+    cy.get('#result').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        test: [
+          { firstName: 'prepend', keyValue: [] },
+          { firstName: 'insert', keyValue: [] },
+          { firstName: 'append', keyValue: [] },
+          { firstName: 'Bill', keyValue: [], lastName: 'Luo' },
+        ],
+      }),
     );
 
     cy.get('#remove').click();
     cy.get('#remove').click();
     cy.get('#remove').click();
 
-    cy.get('#dirty-nested-0').contains(
-      '{"test":[{"keyValue":[{"name":true},{"name":true}],"firstName":true,"lastName":true}]}',
+    cy.get('#dirty-nested-0').should(($state) =>
+      expect(JSON.parse($state.text())).to.be.deep.equal({
+        test: [
+          {
+            firstName: true,
+            keyValue: [{ name: true }, { name: true }],
+            lastName: true,
+          },
+        ],
+      }),
     );
 
     cy.get('#submit').click();

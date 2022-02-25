@@ -16,9 +16,9 @@ jobs:
       - name: Lint
         run: |
           yarn lint
-          yarn lint:types
-      - name: Test
-        run: yarn test --ci
+          yarn type
 
-      - name: Build
-        run: yarn build
+      - name: Test
+        run: |
+          yarn test --ci
+          yarn tsd

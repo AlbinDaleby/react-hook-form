@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import {
   act as actComponent,
   fireEvent,
@@ -15,6 +15,8 @@ import { useFieldArray } from '../../useFieldArray';
 import { useForm } from '../../useForm';
 import get from '../../utils/get';
 import isFunction from '../../utils/isFunction';
+
+jest.useFakeTimers();
 
 describe('setValue', () => {
   it('should not setValue for unmounted state with shouldUnregister', () => {
@@ -174,6 +176,49 @@ describe('setValue', () => {
         persist: () => {},
       } as React.SyntheticEvent);
     });
+  });
+
+  it('should update nested controlled input', () => {
+    function App() {
+      const { setValue, control } = useForm({
+        defaultValues: {
+          test: {
+            deep: {
+              field: 'test',
+            },
+          },
+        },
+      });
+
+      return (
+        <form>
+          <Controller
+            name="test.deep.field"
+            control={control}
+            render={({ field }) => <input {...field} />}
+          />
+
+          <button
+            type="button"
+            onClick={() => {
+              setValue('test.deep', {
+                field: 'updateValue',
+              });
+            }}
+          >
+            setValue
+          </button>
+        </form>
+      );
+    }
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toEqual(
+      'updateValue',
+    );
   });
 
   it('should set object array value', () => {
@@ -535,7 +580,7 @@ describe('setValue', () => {
       });
 
       await actComponent(async () => {
-        await fireEvent.click(screen.getByRole('button', { name: 'update' }));
+        fireEvent.click(screen.getByRole('button', { name: 'update' }));
       });
 
       expect(screen.queryByText('test')).toBeNull();
@@ -774,6 +819,57 @@ describe('setValue', () => {
     });
   });
 
+  describe('with strict mode', () => {
+    it('should be able to set input value async', async () => {
+      function sleep(ms: number) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      function App() {
+        const { control, setValue } = useForm();
+
+        React.useEffect(() => {
+          sleep(1000);
+          setValue('name', 'test');
+        }, [setValue]);
+
+        return (
+          <div className="App">
+            <form>
+              <Controller
+                defaultValue=""
+                name="name"
+                control={control}
+                render={({ field }) => {
+                  return (
+                    <div>
+                      <input />
+                      <p>{field.value}</p>
+                    </div>
+                  );
+                }}
+              />
+            </form>
+          </div>
+        );
+      }
+
+      render(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>,
+      );
+
+      actComponent(() => {
+        jest.advanceTimersByTime(10000);
+      });
+
+      await waitFor(async () => {
+        screen.getByText('test');
+      });
+    });
+  });
+
   it('should set hidden input value correctly and reflect on the submission data', async () => {
     let submitData = undefined;
 
@@ -806,11 +902,11 @@ describe('setValue', () => {
     render(<Component />);
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'change' }));
+      fireEvent.click(screen.getByRole('button', { name: 'change' }));
     });
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     });
 
     expect(submitData).toEqual({
@@ -1214,9 +1310,77 @@ describe('setValue', () => {
     render(<App />);
 
     await actComponent(async () => {
-      await fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByRole('button'));
     });
 
     expect(watchedValue).toMatchSnapshot();
+  });
+
+  it('should update isDirty even input is not registered', async () => {
+    const App = () => {
+      const {
+        setValue,
+        formState: { isDirty },
+      } = useForm({
+        defaultValues: {
+          test: '',
+        },
+      });
+
+      React.useEffect(() => {
+        setValue('test', '1234', { shouldDirty: true });
+      }, [setValue]);
+
+      return <p>{isDirty ? 'dirty' : 'not'}</p>;
+    };
+
+    render(<App />);
+
+    await waitFor(() => {
+      screen.getByText('dirty');
+    });
+  });
+
+  it('should update both dirty and touched state', () => {
+    const App = () => {
+      const {
+        register,
+        formState: { dirtyFields, touchedFields },
+        setValue,
+      } = useForm({
+        defaultValues: {
+          firstName: '',
+        },
+      });
+
+      return (
+        <form>
+          <label>First Name</label>
+          <input type="text" {...register('firstName')} />
+          {dirtyFields.firstName && <p>dirty</p>}
+          {touchedFields.firstName && <p>touched</p>}
+
+          <button
+            type="button"
+            onClick={() =>
+              setValue('firstName', 'test', {
+                shouldValidate: true,
+                shouldDirty: true,
+                shouldTouch: true,
+              })
+            }
+          >
+            setValue
+          </button>
+        </form>
+      );
+    };
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    screen.getByText('dirty');
+    screen.getByText('touched');
   });
 });
