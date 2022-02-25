@@ -1,5 +1,5 @@
 import { FieldValues } from './fields';
-import { Control } from './form';
+import { Control, UnpackNestedValue } from './form';
 import { FieldArrayPath, FieldArrayPathValue } from './path';
 
 export type UseFieldArrayProps<
@@ -99,8 +99,8 @@ export type UseFieldArrayPrepend<
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   value:
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>[],
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
   options?: FieldArrayMethodProps,
 ) => void;
 
@@ -130,8 +130,8 @@ export type UseFieldArrayAppend<
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   value:
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>[],
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
   options?: FieldArrayMethodProps,
 ) => void;
 
@@ -184,8 +184,8 @@ export type UseFieldArrayInsert<
 > = (
   index: number,
   value:
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>[],
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
   options?: FieldArrayMethodProps,
 ) => void;
 
@@ -209,12 +209,12 @@ export type UseFieldArrayInsert<
  * </button>
  * ```
  */
-type UseFieldArrayUpdate<
+export type UseFieldArrayUpdate<
   TFieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   index: number,
-  value: Partial<FieldArray<TFieldValues, TFieldArrayName>>,
+  value: UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>,
 ) => void;
 
 /**
@@ -235,13 +235,13 @@ type UseFieldArrayUpdate<
  * </button>
  * ```
  */
-type UseFieldArrayReplace<
+export type UseFieldArrayReplace<
   TFieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   value:
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>
-    | Partial<FieldArray<TFieldValues, TFieldArrayName>>[],
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
+    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
 ) => void;
 
 export type UseFieldArrayReturn<

@@ -85,7 +85,7 @@ export type DelayCallback = (
 
 export type UseFormProps<
   TFieldValues extends FieldValues = FieldValues,
-  TContext extends object = object,
+  TContext = any,
 > = Partial<{
   mode: Mode;
   reValidateMode: Exclude<Mode, 'onTouched' | 'all'>;
@@ -200,6 +200,10 @@ export type UseFormRegister<TFieldValues extends FieldValues> = <
   options?: RegisterOptions<TFieldValues, TFieldName>,
 ) => UseFormRegisterReturn;
 
+export type SetFocusOptions = Partial<{
+  shouldSelect: boolean;
+}>;
+
 /**
  * Set focus on a registered field. You can start to invoke this method after all fields are mounted to the DOM.
  *
@@ -207,20 +211,22 @@ export type UseFormRegister<TFieldValues extends FieldValues> = <
  * [API](https://react-hook-form.com/api/useform/setfocus) • [Demo](https://codesandbox.io/s/setfocus-rolus)
  *
  * @param name - the path name to the form field value.
+ * @param options - input focus behavior options
  *
  * @example
  * ```tsx
  * useEffect(() => {
  *   setFocus("name");
  * }, [setFocus])
- *
- * <button onClick={() => setFocus("name")}>Focus</button>
+ * // shouldSelect allows to select input's content on focus
+ * <button onClick={() => setFocus("name", { shouldSelect: true })}>Focus</button>
  * ```
  */
 export type UseFormSetFocus<TFieldValues extends FieldValues> = <
   TFieldName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
 >(
   name: TFieldName,
+  options?: SetFocusOptions,
 ) => void;
 
 export type UseFormGetValues<TFieldValues extends FieldValues> = {
@@ -711,7 +717,7 @@ export type BatchFieldArrayUpdate = <
 
 export type Control<
   TFieldValues extends FieldValues = FieldValues,
-  TContext extends object = object,
+  TContext = any,
 > = {
   _subjects: Subjects<TFieldValues>;
   _removeUnmounted: Noop;
@@ -753,7 +759,7 @@ export type WatchObserver<TFieldValues> = (
 
 export type UseFormReturn<
   TFieldValues extends FieldValues = FieldValues,
-  TContext extends object = object,
+  TContext = any,
 > = {
   watch: UseFormWatch<TFieldValues>;
   getValues: UseFormGetValues<TFieldValues>;
@@ -797,7 +803,7 @@ export type UseWatchProps<TFieldValues extends FieldValues = FieldValues> = {
 
 export type FormProviderProps<
   TFieldValues extends FieldValues = FieldValues,
-  TContext extends object = object,
+  TContext = any,
 > = {
   children: React.ReactNode;
 } & UseFormReturn<TFieldValues, TContext>;
