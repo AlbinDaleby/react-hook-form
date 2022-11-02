@@ -1,6 +1,7 @@
 import { FieldValues } from './fields';
-import { Control, UnpackNestedValue } from './form';
+import { Control } from './form';
 import { FieldArrayPath, FieldArrayPathValue } from './path';
+import { RegisterOptions, Validate } from './validator';
 
 export type UseFieldArrayProps<
   TFieldValues extends FieldValues = FieldValues,
@@ -10,6 +11,14 @@ export type UseFieldArrayProps<
   name: TFieldArrayName;
   keyName?: TKeyName;
   control?: Control<TFieldValues>;
+  rules?: {
+    validate?:
+      | Validate<FieldArray<TFieldValues, TFieldArrayName>[]>
+      | Record<string, Validate<FieldArray<TFieldValues, TFieldArrayName>>>;
+  } & Pick<
+    RegisterOptions<TFieldValues>,
+    'maxLength' | 'minLength' | 'required'
+  >;
   shouldUnregister?: boolean;
 };
 
@@ -95,12 +104,12 @@ export type UseFieldArrayMove = (indexA: number, indexB: number) => void;
  * ```
  */
 export type UseFieldArrayPrepend<
-  TFieldValues,
+  TFieldValues extends FieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   value:
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
+    | FieldArray<TFieldValues, TFieldArrayName>
+    | FieldArray<TFieldValues, TFieldArrayName>[],
   options?: FieldArrayMethodProps,
 ) => void;
 
@@ -115,8 +124,8 @@ export type UseFieldArrayPrepend<
  *
  * @example
  * ```tsx
- * <button type="button" onClick={() => prepend({ name: "data" })}>Append</button>
- * <button type="button" onClick={() => prepend({ name: "data" }, { shouldFocus: false })}>Append</button>
+ * <button type="button" onClick={() => append({ name: "data" })}>Append</button>
+ * <button type="button" onClick={() => append({ name: "data" }, { shouldFocus: false })}>Append</button>
  * <button
  *   type="button"
  *   onClick={() => append([{ name: "data" }, { name: "data" }])}
@@ -126,12 +135,12 @@ export type UseFieldArrayPrepend<
  * ```
  */
 export type UseFieldArrayAppend<
-  TFieldValues,
+  TFieldValues extends FieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   value:
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
+    | FieldArray<TFieldValues, TFieldArrayName>
+    | FieldArray<TFieldValues, TFieldArrayName>[],
   options?: FieldArrayMethodProps,
 ) => void;
 
@@ -179,13 +188,13 @@ export type UseFieldArrayRemove = (index?: number | number[]) => void;
  * ```
  */
 export type UseFieldArrayInsert<
-  TFieldValues,
+  TFieldValues extends FieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   index: number,
   value:
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
+    | FieldArray<TFieldValues, TFieldArrayName>
+    | FieldArray<TFieldValues, TFieldArrayName>[],
   options?: FieldArrayMethodProps,
 ) => void;
 
@@ -210,15 +219,12 @@ export type UseFieldArrayInsert<
  * ```
  */
 export type UseFieldArrayUpdate<
-  TFieldValues,
+  TFieldValues extends FieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
-> = (
-  index: number,
-  value: UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>,
-) => void;
+> = (index: number, value: FieldArray<TFieldValues, TFieldArrayName>) => void;
 
 /**
- * 	Replace the entire field array values.
+ * Replace the entire field array values.
  *
  * @remarks
  * [API](https://react-hook-form.com/api/usefieldarray) • [Demo](https://codesandbox.io/s/calc-i231d)
@@ -236,12 +242,12 @@ export type UseFieldArrayUpdate<
  * ```
  */
 export type UseFieldArrayReplace<
-  TFieldValues,
+  TFieldValues extends FieldValues,
   TFieldArrayName extends FieldArrayPath<TFieldValues> = FieldArrayPath<TFieldValues>,
 > = (
   value:
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>
-    | Partial<UnpackNestedValue<FieldArray<TFieldValues, TFieldArrayName>>>[],
+    | FieldArray<TFieldValues, TFieldArrayName>
+    | FieldArray<TFieldValues, TFieldArrayName>[],
 ) => void;
 
 export type UseFieldArrayReturn<

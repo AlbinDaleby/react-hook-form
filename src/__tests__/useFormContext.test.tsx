@@ -1,11 +1,12 @@
 import React from 'react';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { useController } from '../useController';
 import { useForm } from '../useForm';
 import { FormProvider, useFormContext } from '../useFormContext';
 import { useFormState } from '../useFormState';
 import { useWatch } from '../useWatch';
+import deepEqual from '../utils/deepEqual';
 
 describe('FormProvider', () => {
   it('should have access to all methods with useFormContext', () => {
@@ -37,7 +38,7 @@ describe('FormProvider', () => {
     expect(mockRegister).toHaveBeenCalled();
   });
 
-  it('should work correctly with Controller, useWatch, useFormState.', () => {
+  it('should work correctly with Controller, useWatch, useFormState.', async () => {
     const TestComponent = () => {
       const { field } = useController({
         name: 'test',
@@ -51,13 +52,13 @@ describe('FormProvider', () => {
         name: 'test',
       });
 
-      return <p>{value}</p>;
+      return <p>Value: {value === undefined ? 'undefined value' : value}</p>;
     };
 
     const TestFormState = () => {
       const { isDirty } = useFormState();
 
-      return <div>{isDirty ? 'yes' : 'no'}</div>;
+      return <div>Dirty: {isDirty ? 'yes' : 'no'}</div>;
     };
 
     const Component = () => {
@@ -71,9 +72,17 @@ describe('FormProvider', () => {
       );
     };
 
-    const { asFragment } = render(<Component />);
+    render(<Component />);
 
-    expect(asFragment()).toMatchSnapshot();
+    const input = screen.getByRole('textbox');
+
+    expect(input).toBeVisible();
+    expect(await screen.findByText('Value: undefined value')).toBeVisible();
+    expect(screen.getByText('Dirty: no')).toBeVisible();
+
+    fireEvent.change(input, { target: { value: 'test' } });
+    expect(screen.getByText('Value: test')).toBeVisible();
+    expect(screen.getByText('Dirty: yes')).toBeVisible();
   });
 
   it('should not throw type error', () => {
@@ -102,5 +111,86 @@ describe('FormProvider', () => {
     }
 
     render(<App />);
+  });
+
+  it('should be able to access defaultValues within formState', () => {
+    type FormValues = {
+      firstName: string;
+      lastName: string;
+    };
+
+    const defaultValues = {
+      firstName: 'a',
+      lastName: 'b',
+    };
+
+    const Test1 = () => {
+      const methods = useFormState();
+
+      return (
+        <p>
+          {deepEqual(methods.defaultValues, defaultValues)
+            ? 'context-yes'
+            : 'context-no'}
+        </p>
+      );
+    };
+
+    const Test = () => {
+      const methods = useFormContext();
+
+      return (
+        <p>
+          {deepEqual(methods.formState.defaultValues, defaultValues)
+            ? 'yes'
+            : 'no'}
+        </p>
+      );
+    };
+
+    const Component = () => {
+      const methods = useForm<FormValues>({
+        defaultValues,
+      });
+
+      return (
+        <FormProvider {...methods}>
+          <Test />
+          <Test1 />
+          <button
+            onClick={() => {
+              methods.reset({
+                firstName: 'c',
+                lastName: 'd',
+              });
+            }}
+          >
+            reset
+          </button>
+          <p>{JSON.stringify(defaultValues)}</p>
+        </FormProvider>
+      );
+    };
+
+    render(<Component />);
+
+    expect(screen.getByText('yes')).toBeVisible();
+    expect(screen.getByText('context-yes')).toBeVisible();
+
+    screen.getByText(JSON.stringify(defaultValues));
+
+    fireEvent.click(screen.getByRole('button'));
+
+    waitFor(() => {
+      expect(screen.getByText('yes')).not.toBeValid();
+      expect(screen.getByText('context-yes')).not.toBeVisible();
+
+      screen.getByText(
+        JSON.stringify({
+          firstName: 'c',
+          lastName: 'd',
+        }),
+      );
+    });
   });
 });

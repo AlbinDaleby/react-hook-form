@@ -1,4 +1,3 @@
-import isBoolean from './isBoolean';
 import isEmptyObject from './isEmptyObject';
 import isKey from './isKey';
 import isObject from './isObject';
@@ -14,6 +13,15 @@ function baseGet(object: any, updatePath: (string | number)[]) {
   }
 
   return object;
+}
+
+function isEmptyArray(obj: unknown[]) {
+  for (const key in obj) {
+    if (!isUndefined(obj[key])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export default function unset(object: any, path: string) {
@@ -44,13 +52,7 @@ export default function unset(object: any, path: string) {
       if (
         currentPathsLength === index &&
         ((isObject(objectRef) && isEmptyObject(objectRef)) ||
-          (Array.isArray(objectRef) &&
-            !objectRef.filter(
-              (data) =>
-                (isObject(data) && !isEmptyObject(data)) ||
-                isBoolean(data) ||
-                (Array.isArray(data) && data.length),
-            ).length))
+          (Array.isArray(objectRef) && isEmptyArray(objectRef)))
       ) {
         previousObjRef ? delete previousObjRef[item] : delete object[item];
       }

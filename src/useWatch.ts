@@ -13,7 +13,6 @@ import {
   FieldPathValues,
   FieldValues,
   InternalFieldName,
-  UnpackNestedValue,
   UseWatchProps,
 } from './types';
 import { useFormContext } from './useFormContext';
@@ -43,11 +42,11 @@ import { useSubscribe } from './useSubscribe';
 export function useWatch<
   TFieldValues extends FieldValues = FieldValues,
 >(props: {
-  defaultValue?: UnpackNestedValue<DeepPartialSkipArrayKey<TFieldValues>>;
+  defaultValue?: DeepPartialSkipArrayKey<TFieldValues>;
   control?: Control<TFieldValues>;
   disabled?: boolean;
   exact?: boolean;
-}): UnpackNestedValue<DeepPartialSkipArrayKey<TFieldValues>>;
+}): DeepPartialSkipArrayKey<TFieldValues>;
 /**
  * Custom hook to subscribe to field change and isolate re-rendering at the component level.
  *
@@ -106,7 +105,7 @@ export function useWatch<
   TFieldNames extends readonly FieldPath<TFieldValues>[] = readonly FieldPath<TFieldValues>[],
 >(props: {
   name: readonly [...TFieldNames];
-  defaultValue?: UnpackNestedValue<DeepPartialSkipArrayKey<TFieldValues>>;
+  defaultValue?: DeepPartialSkipArrayKey<TFieldValues>;
   control?: Control<TFieldValues>;
   disabled?: boolean;
   exact?: boolean;
@@ -126,8 +125,7 @@ export function useWatch<
  */
 export function useWatch<
   TFieldValues extends FieldValues = FieldValues,
-  TFieldNames extends FieldPath<TFieldValues>[] = FieldPath<TFieldValues>[],
->(): FieldPathValues<TFieldValues, TFieldNames>;
+>(): DeepPartialSkipArrayKey<TFieldValues>;
 /**
  * Custom hook to subscribe to field change and isolate re-rendering at the component level.
  *
@@ -144,7 +142,9 @@ export function useWatch<
  * })
  * ```
  */
-export function useWatch<TFieldValues>(props?: UseWatchProps<TFieldValues>) {
+export function useWatch<TFieldValues extends FieldValues>(
+  props?: UseWatchProps<TFieldValues>,
+) {
   const methods = useFormContext();
   const {
     control = methods.control,
@@ -157,40 +157,38 @@ export function useWatch<TFieldValues>(props?: UseWatchProps<TFieldValues>) {
 
   _name.current = name;
 
-  const callback = React.useCallback(
-    (formState) => {
-      if (
-        shouldSubscribeByName(
-          _name.current as InternalFieldName,
-          formState.name,
-          exact,
-        )
-      ) {
-        const fieldValues = generateWatchOutput(
-          _name.current as InternalFieldName | InternalFieldName[],
-          control._names,
-          formState.values || control._formValues,
-        );
-
-        updateValue(
-          isUndefined(_name.current) ||
-            (isObject(fieldValues) && !objectHasFunction(fieldValues))
-            ? { ...fieldValues }
-            : Array.isArray(fieldValues)
-            ? [...fieldValues]
-            : isUndefined(fieldValues)
-            ? defaultValue
-            : fieldValues,
-        );
-      }
-    },
-    [control, exact, defaultValue],
-  );
-
   useSubscribe({
     disabled,
     subject: control._subjects.watch,
-    callback,
+    callback: React.useCallback(
+      (formState: { name?: InternalFieldName; values?: FieldValues }) => {
+        if (
+          shouldSubscribeByName(
+            _name.current as InternalFieldName,
+            formState.name,
+            exact,
+          )
+        ) {
+          const fieldValues = generateWatchOutput(
+            _name.current as InternalFieldName | InternalFieldName[],
+            control._names,
+            formState.values || control._formValues,
+          );
+
+          updateValue(
+            isUndefined(_name.current) ||
+              (isObject(fieldValues) && !objectHasFunction(fieldValues))
+              ? { ...fieldValues }
+              : Array.isArray(fieldValues)
+              ? [...fieldValues]
+              : isUndefined(fieldValues)
+              ? defaultValue
+              : fieldValues,
+          );
+        }
+      },
+      [control, exact, defaultValue],
+    ),
   });
 
   const [value, updateValue] = React.useState<unknown>(
@@ -199,9 +197,7 @@ export function useWatch<TFieldValues>(props?: UseWatchProps<TFieldValues>) {
       : defaultValue,
   );
 
-  React.useEffect(() => {
-    control._removeUnmounted();
-  });
+  React.useEffect(() => control._removeUnmounted());
 
   return value;
 }

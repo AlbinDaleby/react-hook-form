@@ -3,18 +3,11 @@ import React from 'react';
 import { createFormControl } from './logic/createFormControl';
 import getProxyFormState from './logic/getProxyFormState';
 import shouldRenderFormState from './logic/shouldRenderFormState';
-import {
-  FieldErrors,
-  FieldNamesMarkedBoolean,
-  FieldValues,
-  FormState,
-  UseFormProps,
-  UseFormReturn,
-} from './types';
+import { FieldValues, FormState, UseFormProps, UseFormReturn } from './types';
 import { useSubscribe } from './useSubscribe';
 
 /**
- * Custom hook to mange the entire form.
+ * Custom hook to manage the entire form.
  *
  * @remarks
  * [API](https://react-hook-form.com/api/useform) • [Demo](https://codesandbox.io/s/react-hook-form-get-started-ts-5ksmm) • [Video](https://www.youtube.com/watch?v=RkXv4AXXC_4)
@@ -54,20 +47,19 @@ export function useForm<
   const [formState, updateFormState] = React.useState<FormState<TFieldValues>>({
     isDirty: false,
     isValidating: false,
-    dirtyFields: {} as FieldNamesMarkedBoolean<TFieldValues>,
     isSubmitted: false,
-    submitCount: 0,
     resetCount: 0,
-    touchedFields: {} as FieldNamesMarkedBoolean<TFieldValues>,
     isSubmitting: false,
     isSubmitSuccessful: false,
     isValid: false,
-    errors: {} as FieldErrors<TFieldValues>,
+    submitCount: 0,
+    dirtyFields: {},
+    touchedFields: {},
+    errors: {},
+    defaultValues: props.defaultValues,
   });
 
-  if (_formControl.current) {
-    _formControl.current.control._options = props;
-  } else {
+  if (!_formControl.current) {
     _formControl.current = {
       ...createFormControl(props),
       formState,
@@ -75,24 +67,23 @@ export function useForm<
   }
 
   const control = _formControl.current.control;
-
-  const callback = React.useCallback(
-    (value) => {
-      if (shouldRenderFormState(value, control._proxyFormState, true)) {
-        control._formState = {
-          ...control._formState,
-          ...value,
-        };
-
-        updateFormState({ ...control._formState });
-      }
-    },
-    [control],
-  );
+  control._options = props;
 
   useSubscribe({
     subject: control._subjects.state,
-    callback,
+    callback: React.useCallback(
+      (value: FieldValues) => {
+        if (shouldRenderFormState(value, control._proxyFormState, true)) {
+          control._formState = {
+            ...control._formState,
+            ...value,
+          };
+
+          updateFormState({ ...control._formState });
+        }
+      },
+      [control],
+    ),
   });
 
   React.useEffect(() => {
@@ -100,17 +91,20 @@ export function useForm<
       control._proxyFormState.isValid && control._updateValid();
       control._stateFlags.mount = true;
     }
+
     if (control._stateFlags.watch) {
       control._stateFlags.watch = false;
       control._subjects.state.next({});
     }
+
     control._removeUnmounted();
   });
 
-  _formControl.current.formState = getProxyFormState(
-    formState,
-    control._proxyFormState,
-  );
+  React.useEffect(() => {
+    formState.submitCount && control._focusError();
+  }, [control, formState.submitCount]);
+
+  _formControl.current.formState = getProxyFormState(formState, control);
 
   return _formControl.current;
 }

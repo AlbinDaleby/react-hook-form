@@ -9,11 +9,16 @@ import {
   FieldValues,
   Noop,
   RefCallBack,
-  UnpackNestedValue,
   UseFormStateReturn,
 } from './';
 
 export type ControllerFieldState = {
+  /**
+   * @deprecated check `fieldState.error` instead
+   * ```jsx
+   * {fieldState.error && <p>{fieldState.error.message}</p>}
+   * ```
+   */
   invalid: boolean;
   isTouched: boolean;
   isDirty: boolean;
@@ -26,7 +31,7 @@ export type ControllerRenderProps<
 > = {
   onChange: (...event: any[]) => void;
   onBlur: Noop;
-  value: UnpackNestedValue<FieldPathValue<TFieldValues, TName>>;
+  value: FieldPathValue<TFieldValues, TName>;
   name: TName;
   ref: RefCallBack;
 };
@@ -41,7 +46,7 @@ export type UseControllerProps<
     'valueAsNumber' | 'valueAsDate' | 'setValueAs' | 'disabled'
   >;
   shouldUnregister?: boolean;
-  defaultValue?: UnpackNestedValue<FieldPathValue<TFieldValues, TName>>;
+  defaultValue?: FieldPathValue<TFieldValues, TName>;
   control?: Control<TFieldValues>;
 };
 

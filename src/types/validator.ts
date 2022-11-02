@@ -44,5 +44,5 @@ export type RegisterOptions<
   onChange?: (event: any) => void;
   onBlur?: (event: any) => void;
   disabled: boolean;
-  deps: InternalFieldName[];
+  deps: InternalFieldName | InternalFieldName[];
 }>;

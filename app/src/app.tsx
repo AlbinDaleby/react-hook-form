@@ -4,6 +4,7 @@ import AutoUnregister from './autoUnregister';
 import Basic from './basic';
 import Watch from './watch';
 import BasicSchemaValidation from './basicSchemaValidation';
+import CrossFrameForm from './crossFrameForm';
 import SetError from './setError';
 import SetFocus from './setFocus';
 import SetValue from './setValue';
@@ -35,6 +36,7 @@ import Test from './test';
 import Welcome from './welcome';
 import { UseFormState } from './useFormState';
 import SetValueAsyncStrictMode from './setValueStrictMode';
+import { DelayError } from './delayError';
 import './style.css';
 
 const App: React.FC = () => {
@@ -51,6 +53,7 @@ const App: React.FC = () => {
           path="/re-validate-mode/:mode/:reValidateMode"
           element={<ReValidateMode />}
         />
+        <Route path="/crossFrameForm" element={<CrossFrameForm />} />
         <Route path="/manual-register-form" element={<ManualRegisterForm />} />
         <Route path="/watch" element={<Watch />} />
         <Route
@@ -58,6 +61,7 @@ const App: React.FC = () => {
           element={<BasicSchemaValidation />}
         />
         <Route path="/setError" element={<SetError />} />
+        <Route path="/delayError" element={<DelayError />} />
         <Route path="/setFocus" element={<SetFocus />} />
         <Route path="/setValueWithTrigger" element={<SetValueWithTrigger />} />
         <Route path="/conditionalField" element={<ConditionalField />} />

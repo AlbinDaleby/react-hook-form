@@ -1,5 +1,227 @@
 # Changelog
 
+## [7.39.0] - 2022-11-2
+
+## Changed
+
+- `isValid` formState is no longer only applicable with `onChange`, `onTouched`, and `onBlur` mode.
+
+## [7.38.0] - 2022-10-19
+
+## Added
+
+- support build-in validation with input type week and time
+
+```tsx
+<input {...register("week", { min: "2022-W40" })} type="week" />
+<input {...register("time", { min: "11:00" })} type="time" />
+```
+
+## [7.37.0] - 2022-10-07
+
+## Added
+
+- new formState `defaultValues`
+
+```tsx
+const { formState, watch } = useForm({
+  defaultValues: { name: 'test' },
+});
+const { defaultValues } = useFormState();
+
+const name = watch('name');
+
+return (
+  <div>
+    <p>Your name was {defaultValues.name}</p>
+    <p>Updated name is {name}</p>
+  </div>
+);
+```
+
+## Changed
+
+- defaultValues: complex object data contains prototype methods will not be cloned internally
+
+## [7.36.0] - 2022-9-20
+
+## Added
+
+- reset to support callback syntax
+
+```tsx
+reset((formValues) => {
+  return {
+    ...formValues,
+    partialData: 'onlyChangeThis',
+  };
+});
+```
+
+## [7.35.0] - 2022-9-10
+
+## Added
+
+- new type `FieldPathByValue` field path by value generic implementation
+
+```tsx
+function CustomFormComponent<
+  TFieldValues extends FieldValues,
+  Path extends FieldPathByValue<TFieldValues, Date>,
+>({ control, name }: { control: Control<FieldValues>; name: Path }) {
+  const { field } = useController({
+    control,
+    name,
+  });
+}
+
+function App() {
+  const { control } = useForm<{
+    foo: Date;
+    baz: string;
+  }>();
+
+  return (
+    <form>
+      <CustomFormComponent control={control} name="foo" /> {/* no error */}
+      <CustomFormComponent control={control} name="baz" /> {/*  throw an error since baz is string */}
+    </form>
+  );
+}
+```
+
+## Changed
+
+- form context support children prop type
+
+```tsx
+<FormProvider {...methods}>
+  <div /> // ✅
+  <div /> // ✅
+</FormProvider>
+```
+
+## [7.34.0] - 2022-7-28
+
+## Added
+
+- Build in validation support for `useFieldArray` with `rules` prop
+
+```tsx
+useFieldArray({
+  name: 'test',
+  rules: {
+    required: true,
+    minLength: 2,
+    maxLength: 10,
+    validate: (fieldArrayValues) => {
+      if (fieldArrayValues[2].title === 'test') {
+        return 'validate Error';
+      }
+    },
+  },
+});
+
+errors?.test?.root?.message; // access root level errors
+```
+
+## [7.33.0] - 2022-6-24
+
+## Breaking Change
+
+- `@hookform/resolvers` needs to upgraded to version `^2.9.3` above
+- `useFormContext` do always required to provide a generic type check for your form, without providing generic will now require developers to convert error messages to `String` to pass the type check
+
+```tsx
+useFormContext<FormValues>(); // ✅ correct usage by provide form type defination
+
+const { formState } = useFormContext(); // if generic is missing
+String(formState.errors?.input?.message); // will need to convert to string
+```
+
+## Changed
+
+- Deprecate `NestedValue` and `UnpackNestedValue` type, will be **removed** in the next major version. **Important**: If you are using them, it may cause TS compile error, so please just remove the type usage.
+
+```diff
+type FormValues = {
+-  select: NestedValue<{
+-    nested: string
+-  }>
++  select: {
++    nested: string
++  }
+}
+
+type Data = UnpackNestedValue<FieldValues>
+```
+
+- `formState`'s `errors` is now mapped/merged with `FieldError`
+- `UseFormHandleSubmit` has removed unused function generic
+
+## [7.32.0] - 2022-6-10
+
+## Changed
+
+- `UseFormRegisterReturn` name type change from `string` to `TFieldName`
+
+## [7.31.0] - 2022-5-11
+
+## Added
+
+- new: `reset` optional prop: `keepDirtyValues`
+
+```tsx
+reset(
+  {
+    firstName: 'bill', // if firstName is dirty then the value will be retained
+    lastName: 'luo',
+  },
+  { keepDirtyValues: true }, // keep any changed field
+);
+```
+
+## Changed
+
+- `useFieldArray` auto-correct field array errors on user action
+
+```tsx
+const { append } = useFieldArray();
+
+append({ data: '' }); // will auto correct existing field array errors if any
+```
+
+## [7.30.0] - 2022-4-17
+
+## Changed
+
+- improve checkboxes value determine by defaultValues
+
+```tsx
+useForm({
+  defaultValues: {
+    checkboxes: [], // register checkbox will be determine as array of checkboxes
+  },
+});
+register('checkboxes'); // will return array as value
+```
+
+## [7.29.0] - 2022-3-30
+
+## Changed
+
+- tsconfig config change from es2017 to es2018
+
+## [7.28.0] - 2022-3-13
+
+## Changed
+
+- `register` API options `deps` now support string
+
+```tsx
+register('test', { deps: 'test' });
+```
+
 ## [7.27.0] - 2022-2-11
 
 ## Added
@@ -200,6 +422,12 @@ resetField('test', {
   defaultValue: 'test1',
 });
 ```
+
+## Changed
+
+- `useController` will return shallow clone value for the following data type on each rerender
+  - object: `{... value}`
+  - array: `[...value]`
 
 ## [7.18.1] - 2021-11-02
 
@@ -941,7 +1169,7 @@ useWatch({
 
   - `valueAsDate`
   - `valueAsNumber`
-  - `setValue`
+  - `setValueAs`
 
 ```tsx
 register({
@@ -1275,7 +1503,7 @@ getValues(['test', 'test1']); // { test: 'test', test1: 'test1' }
 ```
 
 - `setError` will focus one error at a time and remove confusing set multiple errors, behavior change.
-  - setError will persis an error if it's not part of the form, which requires manual remove with clearError
+  - setError will persist an error if it's not part of the form, which requires manual remove with clearError
   - setError error will be removed by validation rules, rules always take over errors
 
 ```diff

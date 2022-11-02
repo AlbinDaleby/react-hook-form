@@ -5,12 +5,12 @@ import isNameInFieldArray from './logic/isNameInFieldArray';
 import get from './utils/get';
 import { EVENTS } from './constants';
 import {
+  ControllerFieldState,
   Field,
   FieldPath,
   FieldPathValue,
   FieldValues,
   InternalFieldName,
-  UnpackNestedValue,
   UseControllerProps,
   UseControllerReturn,
 } from './types';
@@ -60,7 +60,7 @@ export function useController<
       get(control._defaultValues, name, props.defaultValue),
     ),
     exact: true,
-  }) as UnpackNestedValue<FieldPathValue<TFieldValues, TName>>;
+  }) as FieldPathValue<TFieldValues, TName>;
   const formState = useFormState({
     control,
     name,
@@ -103,43 +103,62 @@ export function useController<
       name,
       value,
       onChange: React.useCallback(
-        (event) => {
+        (event) =>
           _registerProps.current.onChange({
             target: {
               value: getEventValue(event),
               name: name as InternalFieldName,
             },
             type: EVENTS.CHANGE,
-          });
-        },
+          }),
         [name],
       ),
-      onBlur: React.useCallback(() => {
-        _registerProps.current.onBlur({
-          target: {
-            value: get(control._formValues, name),
-            name: name as InternalFieldName,
-          },
-          type: EVENTS.BLUR,
-        });
-      }, [name, control]),
-      ref: React.useCallback(
-        (elm) => {
-          const field = get(control._fields, name);
-
-          if (elm && field && elm.focus) {
-            field._f.ref = {
-              focus: () => elm.focus(),
-              setCustomValidity: (message: string) =>
-                elm.setCustomValidity(message),
-              reportValidity: () => elm.reportValidity(),
-            };
-          }
-        },
-        [name, control._fields],
+      onBlur: React.useCallback(
+        () =>
+          _registerProps.current.onBlur({
+            target: {
+              value: get(control._formValues, name),
+              name: name as InternalFieldName,
+            },
+            type: EVENTS.BLUR,
+          }),
+        [name, control],
       ),
+      ref: (elm) => {
+        const field = get(control._fields, name);
+
+        if (field && elm) {
+          field._f.ref = {
+            focus: () => elm.focus(),
+            select: () => elm.select(),
+            setCustomValidity: (message: string) =>
+              elm.setCustomValidity(message),
+            reportValidity: () => elm.reportValidity(),
+          };
+        }
+      },
     },
     formState,
-    fieldState: control.getFieldState(name, formState),
+    fieldState: Object.defineProperties(
+      {},
+      {
+        invalid: {
+          enumerable: true,
+          get: () => !!get(formState.errors, name),
+        },
+        isDirty: {
+          enumerable: true,
+          get: () => !!get(formState.dirtyFields, name),
+        },
+        isTouched: {
+          enumerable: true,
+          get: () => !!get(formState.touchedFields, name),
+        },
+        error: {
+          enumerable: true,
+          get: () => get(formState.errors, name),
+        },
+      },
+    ) as ControllerFieldState,
   };
 }

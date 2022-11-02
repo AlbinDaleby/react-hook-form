@@ -1,26 +1,18 @@
 import React from 'react';
-import {
-  act as actComponent,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act, renderHook } from '@testing-library/react-hooks';
 
 import { VALIDATION_MODE } from '../../constants';
-import * as generateId from '../../logic/generateId';
 import { useFieldArray } from '../../useFieldArray';
 import { useForm } from '../../useForm';
 
-const mockGenerateId = () => {
-  let id = 0;
-  jest.spyOn(generateId, 'default').mockImplementation(() => (id++).toString());
-};
+let i = 0;
+
+jest.mock('../../logic/generateId', () => () => String(i++));
 
 describe('swap', () => {
   beforeEach(() => {
-    mockGenerateId();
+    i = 0;
   });
 
   it('should swap into pointed position', () => {
@@ -149,20 +141,14 @@ describe('swap', () => {
 
     render(<Component />);
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /append/i }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: /append/i }));
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /submit/i }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }));
 
-    expect(errors.test[0]).toBeUndefined();
+    await waitFor(() => expect(errors.test[0]).toBeUndefined());
     expect(errors.test[1]).toBeDefined();
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /swap/i }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: /swap/i }));
 
     expect(errors.test[0]).toBeDefined();
     expect(errors.test[1]).toBeUndefined();
@@ -414,13 +400,13 @@ describe('swap', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'swap' }));
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
-    screen.getByText(
-      '{"test":[{"id":"4567","test":"data1"},{"id":"1234","test":"data"}]}',
-    );
+    expect(
+      await screen.findByText(
+        '{"test":[{"id":"4567","test":"data1"},{"id":"1234","test":"data"}]}',
+      ),
+    ).toBeVisible();
   });
 
   it('should not omit keyName when provided and defaultValue is empty', async () => {
@@ -481,12 +467,12 @@ describe('swap', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'swap' }));
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
-    screen.getByText(
-      '{"test":[{"id":"whatever1","test":"12341"},{"id":"whatever0","test":"12340"}]}',
-    );
+    expect(
+      await screen.findByText(
+        '{"test":[{"id":"whatever1","test":"12341"},{"id":"whatever0","test":"12340"}]}',
+      ),
+    ).toBeVisible();
   });
 });

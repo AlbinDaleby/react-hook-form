@@ -1,28 +1,20 @@
 import React from 'react';
-import {
-  act as actComponent,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act, renderHook } from '@testing-library/react-hooks';
 
 import { VALIDATION_MODE } from '../../constants';
-import * as generateId from '../../logic/generateId';
 import { Control, FieldPath } from '../../types';
 import { useController } from '../../useController';
 import { useFieldArray } from '../../useFieldArray';
 import { useForm } from '../../useForm';
 
-const mockGenerateId = () => {
-  let id = 0;
-  jest.spyOn(generateId, 'default').mockImplementation(() => (id++).toString());
-};
+let i = 0;
+
+jest.mock('../../logic/generateId', () => () => String(i++));
 
 describe('append', () => {
   beforeEach(() => {
-    mockGenerateId();
+    i = 0;
   });
 
   it('should append dirtyFields fields correctly', async () => {
@@ -70,7 +62,7 @@ describe('append', () => {
     });
     fireEvent.blur(screen.getAllByRole('textbox')[0]);
 
-    await waitFor(() => screen.getByText('dirty'));
+    expect(await screen.findByText('dirty')).toBeVisible();
 
     expect(dirtyInputs).toEqual({
       test: [{ value: true }],
@@ -79,12 +71,7 @@ describe('append', () => {
     fireEvent.click(screen.getByRole('button'));
 
     expect(dirtyInputs).toEqual({
-      test: [
-        { value: true },
-        { value: false },
-        { value: false },
-        { value: true },
-      ],
+      test: [{ value: true }, {}, {}, { value: true }],
     });
   });
 
@@ -128,37 +115,25 @@ describe('append', () => {
 
     render(<Component />);
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'append' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
-    act(() => {
-      expect(currentFields).toEqual([{ id: '0', test: 'test' }]);
-    });
+    expect(currentFields).toEqual([{ id: '0', test: 'test' }]);
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'append' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
-    act(() => {
-      expect(currentFields).toEqual([
-        { id: '0', test: 'test' },
-        { id: '2', test: 'test' },
-      ]);
-    });
+    expect(currentFields).toEqual([
+      { id: '0', test: 'test' },
+      { id: '2', test: 'test' },
+    ]);
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'appendBatch' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'appendBatch' }));
 
-    act(() => {
-      expect(currentFields).toEqual([
-        { id: '0', test: 'test' },
-        { id: '2', test: 'test' },
-        { id: '5', test: 'test-batch' },
-        { id: '6', test: 'test-batch1' },
-      ]);
-    });
+    expect(currentFields).toEqual([
+      { id: '0', test: 'test' },
+      { id: '2', test: 'test' },
+      { id: '5', test: 'test-batch' },
+      { id: '6', test: 'test-batch1' },
+    ]);
   });
 
   it.each(['isDirty', 'dirtyFields'])(
@@ -202,17 +177,11 @@ describe('append', () => {
 
       render(<Component />);
 
-      act(() => {
-        fireEvent.click(screen.getByRole('button', { name: 'append' }));
-      });
+      fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
-      act(() => {
-        fireEvent.click(screen.getByRole('button', { name: 'append' }));
-      });
+      fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
-      act(() => {
-        fireEvent.click(screen.getByRole('button', { name: 'append' }));
-      });
+      fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
       expect(isDirtyValue).toBeTruthy();
       expect(dirtyValue).toEqual({
@@ -543,13 +512,13 @@ describe('append', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
-    screen.getByText(
-      '{"test":[{"id":"1234","test":"data"},{"id":"whatever","test":"1234"}]}',
-    );
+    expect(
+      await screen.findByText(
+        '{"test":[{"id":"1234","test":"data"},{"id":"whatever","test":"1234"}]}',
+      ),
+    ).toBeVisible();
   });
 
   it('should not omit keyName when provided and defaultValue is empty', async () => {
@@ -595,10 +564,10 @@ describe('append', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'append' }));
 
-    await actComponent(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
-    screen.getByText('{"test":[{"id":"whatever","test":"1234"}]}');
+    expect(
+      await screen.findByText('{"test":[{"id":"whatever","test":"1234"}]}'),
+    ).toBeVisible();
   });
 });
