@@ -5,6 +5,7 @@ The things that are different from this repo to the original one:
 - Added minDate and maxDate for validation,
 - Set mode to 'all' and shouldUnregister to 'true' by default
 - Added new prop resetCount to formState that increments by one each time reset() is run
+- Export the validateField function from /logic
 
 ---
 
