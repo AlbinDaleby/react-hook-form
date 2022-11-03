@@ -1,3 +1,4 @@
 import appendErrors from './appendErrors';
-export { appendErrors };
+import validateField from './validateField';
+export { appendErrors, validateField };
 //# sourceMappingURL=index.d.ts.map
